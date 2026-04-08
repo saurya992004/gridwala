@@ -224,6 +224,9 @@ class ElectricityMapsCarbonProvider:
 
         intensity_g = float(payload.get("carbonIntensity"))
         intensity_kg = round(intensity_g / 1000.0, 3)
+        warnings: List[str] = []
+        if payload.get("_disclaimer"):
+            warnings.append(str(payload["_disclaimer"]))
 
         return {
             "provider": self.name,
@@ -236,7 +239,7 @@ class ElectricityMapsCarbonProvider:
             "is_estimated": bool(payload.get("isEstimated", False)),
             "updated_at": payload.get("updatedAt"),
             "observed_at": payload.get("datetime"),
-            "warnings": [],
+            "warnings": warnings,
         }
 
 
@@ -292,9 +295,13 @@ class OpenEITariffProvider:
         if not api_key:
             raise GeoEnrichmentError("OpenEI API key missing. Set NEXUS_OPENEI_API_KEY.")
 
-        payload = _http_get_json(
-            OPENEI_BASE_URL,
-            params={
+        requested_sector = _schema_sector(schema)
+        candidate_sectors = _candidate_openei_sectors(requested_sector)
+        item = None
+        matched_sector = None
+
+        for sector in candidate_sectors:
+            params = {
                 "version": "latest",
                 "format": "json",
                 "api_key": api_key,
@@ -303,17 +310,30 @@ class OpenEITariffProvider:
                 "is_default": "true",
                 "limit": 1,
                 "detail": "full",
-                "sector": _schema_sector(schema),
-            },
-            headers={"User-Agent": "NEXUS-GRID/1.0 (tariff enrichment)"},
-        )
+            }
+            if sector:
+                params["sector"] = sector
 
-        items = payload.get("items", [])
-        if not items:
+            payload = _http_get_json(
+                OPENEI_BASE_URL,
+                params=params,
+                headers={"User-Agent": "NEXUS-GRID/1.0 (tariff enrichment)"},
+            )
+            items = payload.get("items", [])
+            if items:
+                item = items[0]
+                matched_sector = sector or item.get("sector")
+                break
+
+        if not item:
             raise GeoEnrichmentError("OpenEI returned no tariff records for this location.")
 
-        item = items[0]
         energy_rate = _extract_first_energy_rate(item.get("energyratestructure"))
+        warnings: List[str] = []
+        if matched_sector and requested_sector != matched_sector:
+            warnings.append(
+                f"OpenEI matched sector '{matched_sector}' after '{requested_sector}' returned no default tariff."
+            )
 
         return {
             "provider": self.name,
@@ -322,6 +342,8 @@ class OpenEITariffProvider:
             "utility": item.get("utility"),
             "rate_name": item.get("name"),
             "sector": item.get("sector"),
+            "requested_sector": requested_sector,
+            "matched_sector": matched_sector,
             "service_type": item.get("servicetype"),
             "energy_rate": energy_rate,
             "fixed_charge": {
@@ -330,7 +352,7 @@ class OpenEITariffProvider:
             },
             "distributed_generation_rules": item.get("dgrules"),
             "uri": item.get("uri"),
-            "warnings": [],
+            "warnings": warnings,
         }
 
 
@@ -580,6 +602,15 @@ def _extract_first_energy_rate(structure: Any) -> Dict[str, Any]:
                     "sell_rate": tier.get("sell"),
                 }
     return {"rate": None, "unit": None}
+
+
+def _candidate_openei_sectors(primary_sector: str) -> List[Optional[str]]:
+    ordered = [primary_sector, "Residential", "Commercial", "Industrial", None]
+    unique: List[Optional[str]] = []
+    for sector in ordered:
+        if sector not in unique:
+            unique.append(sector)
+    return unique
 
 
 def _solar_outlook(solar_capacity_factor: float) -> str:

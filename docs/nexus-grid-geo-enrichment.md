@@ -62,6 +62,10 @@ Optional live-provider keys:
 - `NEXUS_ELECTRICITYMAPS_API_KEY`
 - `NEXUS_OPENEI_API_KEY`
 
+There is also a ready template at:
+
+- `nexus-grid/backend/.env.example`
+
 Optional networking controls:
 
 - `NEXUS_GEO_TIMEOUT_SECONDS`
@@ -88,3 +92,13 @@ The sandbox simulator still uses the static `carbon_profile` for runtime simulat
 Phase 1B adds real operational context to the generated twin, but it does not yet make the simulator fully weather-driven, tariff-driven, or live-carbon-driven.
 
 That comes next when we wire this context into the simulation engine and controller stack.
+
+## Live Provider Reality Check
+
+If Electricity Maps returns a disclaimer about `SANDBOX MODE`, the request is authenticated but still receiving integration-test data from their side.
+
+That means:
+
+- the project is using the live provider contract correctly
+- the token is valid
+- you still need upgraded provider-side access if you want production-grade carbon data instead of sandbox-mode responses
