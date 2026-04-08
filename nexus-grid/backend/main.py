@@ -20,6 +20,7 @@ from nexusgrid.core.schema_loader import (
     load_from_dict,
     load_from_file,
 )
+from nexusgrid.geo.service import DISTRICT_LABELS, GeoResolutionError, geo_service
 from nexusgrid.core.simulation_runner import SimulationRunner
 
 
@@ -111,6 +112,19 @@ class SchemaPayload(BaseModel):
     schema_data: dict
 
 
+class GeoResolvePayload(BaseModel):
+    query: str
+    provider: str = "auto"
+    limit: int = 5
+
+
+class GeoSchemaPayload(BaseModel):
+    query: str
+    provider: str = "auto"
+    district_type: str = "auto"
+    building_count: Optional[int] = None
+
+
 @app.post("/api/validate", tags=["Schema"])
 def validate_schema(payload: SchemaPayload):
     try:
@@ -121,6 +135,51 @@ def validate_schema(payload: SchemaPayload):
             "building_count": len(validated["buildings"]),
         }
     except SchemaValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.get("/api/geo/providers", tags=["Geo"])
+def get_geo_providers():
+    return {
+        **_engine_descriptor(),
+        "providers": geo_service.list_providers(),
+        "district_types": ["auto", *DISTRICT_LABELS.keys()],
+        "phase": "1A",
+        "recommended_future_apis": [
+            "Electricity Maps for live carbon intensity",
+            "Open-Meteo or NASA POWER for weather and solar context",
+            "OpenEI or utility-specific tariff feeds for price signals",
+        ],
+    }
+
+
+@app.post("/api/geo/resolve", tags=["Geo"])
+def resolve_geo_location(payload: GeoResolvePayload):
+    try:
+        result = geo_service.resolve(
+            query=payload.query,
+            provider=payload.provider,
+            limit=payload.limit,
+        )
+        result["phase"] = "1A"
+        return result
+    except GeoResolutionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.post("/api/geo/schema", tags=["Geo"])
+def generate_geo_schema(payload: GeoSchemaPayload):
+    try:
+        result = geo_service.generate_schema(
+            query=payload.query,
+            provider=payload.provider,
+            district_type=payload.district_type,
+            building_count=payload.building_count,
+        )
+        result["phase"] = "1A"
+        result["building_count"] = len(result["schema"]["buildings"])
+        return result
+    except GeoResolutionError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
 
