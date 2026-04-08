@@ -32,6 +32,10 @@ def run_geo_smoke_test():
         provider="catalog",
         district_type="auto",
         building_count=7,
+        include_enrichment=True,
+        weather_provider="heuristic",
+        carbon_provider="profile",
+        tariff_provider="heuristic",
     )
     schema = generated["schema"]
     print(f"      [OK] District name: {schema['district_name']}")

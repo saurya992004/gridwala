@@ -20,6 +20,7 @@ from nexusgrid.core.schema_loader import (
     load_from_dict,
     load_from_file,
 )
+from nexusgrid.geo.enrichment import GeoEnrichmentError
 from nexusgrid.geo.service import DISTRICT_LABELS, GeoResolutionError, geo_service
 from nexusgrid.core.simulation_runner import SimulationRunner
 
@@ -27,7 +28,7 @@ from nexusgrid.core.simulation_runner import SimulationRunner
 app = FastAPI(
     title="NEXUS GRID API",
     description="AI-powered plug-and-play smart grid orchestration platform",
-    version="2.1.0",
+    version="2.2.0",
 )
 
 app.add_middleware(
@@ -71,7 +72,7 @@ def _engine_descriptor():
 def root():
     return {
         "status": "NEXUS GRID API is running",
-        "version": "2.1.0",
+        "version": "2.2.0",
         **_engine_descriptor(),
     }
 
@@ -81,7 +82,7 @@ def status():
     return {
         "status": "ok",
         "service": "nexus-grid-backend",
-        "version": "2.1.0",
+        "version": "2.2.0",
         **_engine_descriptor(),
         "available_models": len(list_models()),
     }
@@ -123,6 +124,18 @@ class GeoSchemaPayload(BaseModel):
     provider: str = "auto"
     district_type: str = "auto"
     building_count: Optional[int] = None
+    include_enrichment: bool = True
+    weather_provider: str = "auto"
+    carbon_provider: str = "auto"
+    tariff_provider: str = "auto"
+
+
+class GeoEnrichmentPayload(BaseModel):
+    query: str
+    provider: str = "auto"
+    weather_provider: str = "auto"
+    carbon_provider: str = "auto"
+    tariff_provider: str = "auto"
 
 
 @app.post("/api/validate", tags=["Schema"])
@@ -143,9 +156,10 @@ def get_geo_providers():
     return {
         **_engine_descriptor(),
         "providers": geo_service.list_providers(),
+        "enrichment_providers": geo_service.list_enrichment_providers(),
         "district_types": ["auto", *DISTRICT_LABELS.keys()],
-        "phase": "1A",
-        "recommended_future_apis": [
+        "phase": "1B",
+        "recommended_live_apis": [
             "Electricity Maps for live carbon intensity",
             "Open-Meteo or NASA POWER for weather and solar context",
             "OpenEI or utility-specific tariff feeds for price signals",
@@ -161,9 +175,25 @@ def resolve_geo_location(payload: GeoResolvePayload):
             provider=payload.provider,
             limit=payload.limit,
         )
-        result["phase"] = "1A"
+        result["phase"] = "1B"
         return result
-    except GeoResolutionError as exc:
+    except (GeoResolutionError, GeoEnrichmentError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.post("/api/geo/enrich", tags=["Geo"])
+def enrich_geo_location(payload: GeoEnrichmentPayload):
+    try:
+        result = geo_service.enrich_location(
+            query=payload.query,
+            provider=payload.provider,
+            weather_provider=payload.weather_provider,
+            carbon_provider=payload.carbon_provider,
+            tariff_provider=payload.tariff_provider,
+        )
+        result["phase"] = "1B"
+        return result
+    except (GeoResolutionError, GeoEnrichmentError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
 
@@ -175,11 +205,15 @@ def generate_geo_schema(payload: GeoSchemaPayload):
             provider=payload.provider,
             district_type=payload.district_type,
             building_count=payload.building_count,
+            include_enrichment=payload.include_enrichment,
+            weather_provider=payload.weather_provider,
+            carbon_provider=payload.carbon_provider,
+            tariff_provider=payload.tariff_provider,
         )
-        result["phase"] = "1A"
+        result["phase"] = "1B"
         result["building_count"] = len(result["schema"]["buildings"])
         return result
-    except GeoResolutionError as exc:
+    except (GeoResolutionError, GeoEnrichmentError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
 

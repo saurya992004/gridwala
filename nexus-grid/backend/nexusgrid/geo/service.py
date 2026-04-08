@@ -1,4 +1,4 @@
-"""Location resolution and atlas-seed schema generation for Phase 1A."""
+"""Location resolution and atlas-seed schema generation for Phases 1A and 1B."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from urllib.request import Request, urlopen
 
 from nexusgrid.core.schema_loader import MAX_BUILDINGS, load_from_dict
 from nexusgrid.geo.catalog import search_catalog
+from nexusgrid.geo.enrichment import geo_enrichment_service
 
 
 COORDINATE_PATTERN = re.compile(
@@ -381,6 +382,9 @@ class GeoService:
             },
         ]
 
+    def list_enrichment_providers(self) -> Dict[str, List[Dict[str, Any]]]:
+        return geo_enrichment_service.list_providers()
+
     def resolve(self, query: str, provider: str = "auto", limit: int = 5) -> Dict[str, Any]:
         normalized_query = query.strip()
         if not normalized_query:
@@ -433,6 +437,10 @@ class GeoService:
         provider: str = "auto",
         district_type: str = "auto",
         building_count: Optional[int] = None,
+        include_enrichment: bool = True,
+        weather_provider: str = "auto",
+        carbon_provider: str = "auto",
+        tariff_provider: str = "auto",
     ) -> Dict[str, Any]:
         resolution = self.resolve(query=query, provider=provider, limit=5)
         if not resolution["candidates"]:
@@ -446,12 +454,59 @@ class GeoService:
             district_type=district_type,
             building_count=building_count,
         )
+        enrichment = None
+        warnings = list(resolution["warnings"])
+
+        if include_enrichment:
+            enrichment = geo_enrichment_service.enrich(
+                location=location.to_dict(),
+                schema=schema,
+                weather_provider=weather_provider,
+                carbon_provider=carbon_provider,
+                tariff_provider=tariff_provider,
+            )
+            schema = geo_enrichment_service.attach_to_schema(schema=schema, enrichment=enrichment)
+            warnings.extend(enrichment["warnings"])
+
         return {
             "query": query,
             "provider": resolution["provider"],
             "location": location.to_dict(),
             "schema": schema,
-            "warnings": resolution["warnings"],
+            "enrichment": enrichment,
+            "warnings": warnings,
+        }
+
+    def enrich_location(
+        self,
+        query: str,
+        provider: str = "auto",
+        weather_provider: str = "auto",
+        carbon_provider: str = "auto",
+        tariff_provider: str = "auto",
+    ) -> Dict[str, Any]:
+        resolution = self.resolve(query=query, provider=provider, limit=5)
+        if not resolution["candidates"]:
+            raise GeoResolutionError(
+                f"Could not resolve '{query}'. Try a more specific query or coordinates."
+            )
+
+        location = LocationCandidate(**resolution["candidates"][0])
+        schema = self.builder.build(location=location, district_type="auto", building_count=None)
+        enrichment = geo_enrichment_service.enrich(
+            location=location.to_dict(),
+            schema=schema,
+            weather_provider=weather_provider,
+            carbon_provider=carbon_provider,
+            tariff_provider=tariff_provider,
+        )
+
+        return {
+            "query": query,
+            "provider": resolution["provider"],
+            "location": location.to_dict(),
+            "enrichment": enrichment,
+            "warnings": [*resolution["warnings"], *enrichment["warnings"]],
         }
 
     def _provider_order(self, provider: str) -> List[str]:
