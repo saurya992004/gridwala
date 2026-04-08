@@ -1,71 +1,66 @@
 """
-NEXUS GRID — DQN Offline Training Script
-Run this script ONCE to train the agents for N episodes and save weights.
+NEXUS GRID - DQN offline training entrypoint.
 
 Usage:
     python train_dqn.py
     python train_dqn.py --episodes 200 --preset residential_district
-
-The trained weights are saved to nexusgrid/core/dqn_weights.pt
-and automatically loaded by the live server when it starts.
+    python train_dqn.py --preset industrial_microgrid --model-id pilot-industrial-v1
 """
 
+from __future__ import annotations
+
 import argparse
-import json
 import os
 import sys
 import time
+from pathlib import Path
 
-# Add backend root to sys.path so we can import nexusgrid
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from nexusgrid.core.dqn_agent import ACTIONS, DQNAgent, N_ACTIONS
 from nexusgrid.core.environment import NexusGridEnv
-from nexusgrid.core.dqn_agent import DQNAgent, ACTIONS, N_ACTIONS
+from nexusgrid.core.model_registry import resolve_model_id
+from nexusgrid.core.schema_loader import load_from_file
+
+
+PRESETS_DIR = Path(__file__).resolve().parent / "nexusgrid" / "presets"
 
 
 def get_schema(preset_id: str):
-    """Load a preset schema from configs directory."""
-    configs_dir = os.path.join(os.path.dirname(__file__), "nexusgrid", "configs")
-    path = os.path.join(configs_dir, f"{preset_id}.json")
-    if os.path.exists(path):
-        with open(path) as f:
-            return json.load(f)
-    return None
+    path = PRESETS_DIR / f"{preset_id}.json"
+    if not path.exists():
+        raise FileNotFoundError(f"Preset not found: {path}")
+    return load_from_file(path)
 
 
 def action_to_idx(action_val: float) -> int:
-    """Find the closest action index for a given continuous value."""
     return min(range(N_ACTIONS), key=lambda i: abs(ACTIONS[i] - action_val))
 
 
-def train(episodes: int = 100, preset: str = "residential_district", steps_per_episode: int = 168):
-    """
-    Main training loop.
-
-    Args:
-        episodes: Number of full training runs.
-        preset: District schema to train on.
-        steps_per_episode: Hours to simulate per episode (168 = 1 week).
-    """
-    print(f"\n{'='*60}")
-    print(f"  NEXUS GRID — DQN Training")
+def train(
+    episodes: int = 100,
+    preset: str = "residential_district",
+    steps_per_episode: int = 168,
+    model_id: str | None = None,
+):
+    print(f"\n{'=' * 60}")
+    print("  NEXUS GRID - DQN Training")
     print(f"  Preset: {preset} | Episodes: {episodes} | Steps/episode: {steps_per_episode}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     schema = get_schema(preset)
+    model_id = model_id or resolve_model_id(schema=schema, preset_id=preset)
+
     env = NexusGridEnv(schema=schema)
-    n_buildings = env.n_buildings
+    agent = DQNAgent(n_buildings=env.n_buildings)
 
-    agent = DQNAgent(n_buildings=n_buildings)
-
-    # Try to resume from checkpoint
-    resumed = agent.load()
+    resumed = agent.load(model_id=model_id)
     if resumed:
         start_ep = agent._episode
-        print(f"[Train] Resuming from episode {start_ep}")
+        print(f"[Train] Resuming model '{model_id}' from episode {start_ep}")
     else:
         start_ep = 0
-        print(f"[Train] Starting fresh training with {n_buildings} building agents")
+        print(f"[Train] Starting fresh training for model '{model_id}'")
 
     best_reward = float("-inf")
     start_time = time.time()
@@ -82,8 +77,6 @@ def train(episodes: int = 100, preset: str = "residential_district", steps_per_e
                 break
 
             hour = step % 24
-
-            # Agent selects actions (explore=True during training)
             if last_payload:
                 actions = agent.decide(
                     buildings=last_payload["buildings"],
@@ -91,25 +84,21 @@ def train(episodes: int = 100, preset: str = "residential_district", steps_per_e
                     hour=hour,
                     explore=True,
                 )
-                action_indices = [action_to_idx(a) for a in actions]
+                action_indices = [action_to_idx(action) for action in actions]
                 buildings_before = last_payload["buildings"]
             else:
-                actions = [0.0] * n_buildings
-                action_indices = [2] * n_buildings
+                actions = [0.0] * env.n_buildings
+                action_indices = [2] * env.n_buildings
                 buildings_before = None
 
-            # Step environment
             payload = env.step(actions)
             carbon = payload["carbon_intensity"]
             buildings_after = payload["buildings"]
 
-            # Collect step reward (sum across all buildings)
-            step_reward = sum(
-                b.get("nexus_tokens_earned", 0.0) for b in buildings_after
+            episode_reward += sum(
+                building.get("nexus_tokens_earned", 0.0) for building in buildings_after
             )
-            episode_reward += step_reward
 
-            # Store experience
             if buildings_before is not None:
                 agent.store_transition(
                     buildings_before=buildings_before,
@@ -120,7 +109,6 @@ def train(episodes: int = 100, preset: str = "residential_district", steps_per_e
                     done=env.is_done,
                 )
 
-            # Learn
             loss = agent.learn()
             if loss is not None:
                 episode_loss += loss
@@ -128,36 +116,49 @@ def train(episodes: int = 100, preset: str = "residential_district", steps_per_e
 
             last_payload = payload
 
-        # End of episode
         agent.end_episode(episode_reward)
         avg_loss = episode_loss / loss_steps if loss_steps > 0 else 0.0
-
-        # Log progress
         elapsed = time.time() - start_time
+
         if (episode - start_ep + 1) % 10 == 0 or episode == start_ep:
             print(
-                f"  Ep {episode+1:4d}/{start_ep+episodes}  |  "
+                f"  Ep {episode + 1:4d}/{start_ep + episodes}  |  "
                 f"Reward: {episode_reward:8.2f}  |  "
                 f"Loss: {avg_loss:.4f}  |  "
-                f"ε: {agent._epsilon:.3f}  |  "
+                f"Epsilon: {agent._epsilon:.3f}  |  "
                 f"Time: {elapsed:.1f}s"
             )
 
         if episode_reward > best_reward:
             best_reward = episode_reward
-            agent.save()  # Save immediately on new best
+            agent.save(
+                model_id=model_id,
+                extra_metadata={
+                    "preset_id": preset,
+                    "district_name": schema.get("district_name"),
+                    "steps_per_episode": steps_per_episode,
+                    "best_episode_reward": best_reward,
+                },
+            )
 
-    # Final save
-    agent.save()
+    agent.save(
+        model_id=model_id,
+        extra_metadata={
+            "preset_id": preset,
+            "district_name": schema.get("district_name"),
+            "steps_per_episode": steps_per_episode,
+            "best_episode_reward": best_reward,
+        },
+    )
 
     total_time = time.time() - start_time
-    print(f"\n{'='*60}")
-    print(f"  Training Complete!")
+    print(f"\n{'=' * 60}")
+    print("  Training Complete!")
+    print(f"  Model ID: {model_id}")
     print(f"  Best Episode Reward: {best_reward:.2f}")
     print(f"  Total Time: {total_time:.1f}s")
     print(f"  Final Epsilon: {agent._epsilon:.3f}")
-    print(f"  Reward History saved alongside weights.")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
 
 if __name__ == "__main__":
@@ -165,6 +166,12 @@ if __name__ == "__main__":
     parser.add_argument("--episodes", type=int, default=100)
     parser.add_argument("--preset", type=str, default="residential_district")
     parser.add_argument("--steps", type=int, default=168)
+    parser.add_argument("--model-id", type=str, default=None)
     args = parser.parse_args()
 
-    train(episodes=args.episodes, preset=args.preset, steps_per_episode=args.steps)
+    train(
+        episodes=args.episodes,
+        preset=args.preset,
+        steps_per_episode=args.steps,
+        model_id=args.model_id,
+    )

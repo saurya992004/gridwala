@@ -1,5 +1,5 @@
 """
-NEXUS GRID — FastAPI Backend
+NEXUS GRID - FastAPI Backend
 Entry point for the NEXUS GRID API server.
 """
 
@@ -8,21 +8,25 @@ import json
 from pathlib import Path
 from typing import Dict, Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from nexusgrid.core.simulation_runner import SimulationRunner
-from nexusgrid.core.schema_loader import load_from_dict, load_from_file, SchemaValidationError
 from nexusgrid.core.carbon_profiles import list_profiles
+from nexusgrid.core.environment import ENGINE_MODE, ENGINE_NAME, ENGINE_VERSION
+from nexusgrid.core.model_registry import get_model, list_models
+from nexusgrid.core.schema_loader import (
+    SchemaValidationError,
+    load_from_dict,
+    load_from_file,
+)
+from nexusgrid.core.simulation_runner import SimulationRunner
 
-# ---------------------------------------------------------------------------
-# App setup
-# ---------------------------------------------------------------------------
+
 app = FastAPI(
     title="NEXUS GRID API",
-    description="AI-powered Plug-and-Play Smart Grid Orchestration Platform",
-    version="2.0.0",
+    description="AI-powered plug-and-play smart grid orchestration platform",
+    version="2.1.0",
 )
 
 app.add_middleware(
@@ -33,68 +37,74 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Presets directory
 PRESETS_DIR = Path(__file__).parent / "nexusgrid" / "presets"
 
 PRESET_META = {
     "residential_district": {
-        "label": "🏘️ Residential District",
+        "label": "Residential District",
         "description": "5 typical UK residential homes with rooftop solar and home batteries",
         "file": "residential_district.json",
     },
     "university_campus": {
-        "label": "🎓 University Campus",
+        "label": "University Campus",
         "description": "Mixed campus microgrid: lecture halls, dorms, library, admin building",
         "file": "university_campus.json",
     },
     "industrial_microgrid": {
-        "label": "🏭 Industrial Microgrid (India)",
+        "label": "Industrial Microgrid (India)",
         "description": "Factory, warehouses, and EV charging hub on Maharashtra grid",
         "file": "industrial_microgrid.json",
     },
 }
 
-# ---------------------------------------------------------------------------
-# Health
-# ---------------------------------------------------------------------------
+
+def _engine_descriptor():
+    return {
+        "engine_mode": ENGINE_MODE,
+        "engine_name": ENGINE_NAME,
+        "engine_version": ENGINE_VERSION,
+    }
+
 
 @app.get("/", tags=["Health"])
 def root():
-    return {"status": "NEXUS GRID API is running", "version": "2.0.0"}
+    return {
+        "status": "NEXUS GRID API is running",
+        "version": "2.1.0",
+        **_engine_descriptor(),
+    }
 
 
 @app.get("/status", tags=["Health"])
 def status():
-    return {"status": "ok", "service": "nexus-grid-backend", "version": "2.0.0"}
+    return {
+        "status": "ok",
+        "service": "nexus-grid-backend",
+        "version": "2.1.0",
+        **_engine_descriptor(),
+        "available_models": len(list_models()),
+    }
 
-
-# ---------------------------------------------------------------------------
-# Plug-and-Play API — Presets & Schema
-# ---------------------------------------------------------------------------
 
 @app.get("/api/presets", tags=["Schema"])
 def get_presets():
-    """List all available built-in simulation presets."""
     return {
-        "presets": [
-            {"id": k, **v}
-            for k, v in PRESET_META.items()
-        ],
+        "presets": [{"id": preset_id, **meta} for preset_id, meta in PRESET_META.items()],
         "carbon_profiles": list_profiles(),
     }
 
 
 @app.get("/api/presets/{preset_id}", tags=["Schema"])
 def get_preset_schema(preset_id: str):
-    """Return the full JSON schema for a named preset."""
     if preset_id not in PRESET_META:
         raise HTTPException(status_code=404, detail=f"Preset '{preset_id}' not found.")
+
     path = PRESETS_DIR / PRESET_META[preset_id]["file"]
     try:
         schema = load_from_file(path)
         return {"preset_id": preset_id, "schema": schema}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 class SchemaPayload(BaseModel):
@@ -103,10 +113,6 @@ class SchemaPayload(BaseModel):
 
 @app.post("/api/validate", tags=["Schema"])
 def validate_schema(payload: SchemaPayload):
-    """
-    Validate a custom Nexus Schema JSON.
-    Returns the validated + normalised schema, or validation errors.
-    """
     try:
         validated = load_from_dict(payload.schema_data)
         return {
@@ -114,57 +120,61 @@ def validate_schema(payload: SchemaPayload):
             "schema": validated,
             "building_count": len(validated["buildings"]),
         }
-    except SchemaValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    except SchemaValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
-# ---------------------------------------------------------------------------
-# WebSocket — Schema-Aware Live Simulation Stream
-# ---------------------------------------------------------------------------
+@app.get("/api/models", tags=["Models"])
+def get_models():
+    return {
+        **_engine_descriptor(),
+        "models": list_models(),
+    }
+
+
+@app.get("/api/models/{model_id}", tags=["Models"])
+def get_model_detail(model_id: str):
+    model = get_model(model_id)
+    if not model:
+        raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found.")
+
+    return {
+        **_engine_descriptor(),
+        "model": model,
+    }
+
 
 @app.websocket("/ws/simulate")
 async def ws_simulate(
     websocket: WebSocket,
     preset: Optional[str] = Query(default=None, description="Preset ID to run"),
 ):
-    """
-    WebSocket endpoint for live simulation streaming.
-
-    Connect with:
-      ws://localhost:8000/ws/simulate               → default demo district
-      ws://localhost:8000/ws/simulate?preset=residential_district
-      ws://localhost:8000/ws/simulate?preset=university_campus
-      ws://localhost:8000/ws/simulate?preset=industrial_microgrid
-
-    After connecting, send a custom schema to override:
-      {"action": "load_schema", "schema": { ...nexus schema dict... }}
-
-    Other controls:
-      {"action": "pause"}
-      {"action": "resume"}
-      {"action": "set_speed", "value": 5.0}
-      {"action": "emergency", "scenario": "solar_offline|carbon_spike|heatwave"}
-      {"action": "clear_emergency"}
-    """
     await websocket.accept()
 
-    # Load schema from preset query param if provided
+    active_preset = preset if preset in PRESET_META else None
     schema = None
-    if preset and preset in PRESET_META:
+    if active_preset:
         try:
-            schema = load_from_file(PRESETS_DIR / PRESET_META[preset]["file"])
+            schema = load_from_file(PRESETS_DIR / PRESET_META[active_preset]["file"])
         except Exception:
-            schema = None  # Fall back to default
+            schema = None
 
-    runner = SimulationRunner(schema=schema)
+    runner = SimulationRunner(schema=schema, preset_id=active_preset)
 
-    await websocket.send_json({
-        "type": "connected",
-        "district_name": runner.env._district_name,
-        "buildings": runner.env.building_names,
-        "max_steps": runner.env.max_steps,
-        "preset": preset or "default",
-    })
+    await websocket.send_json(
+        {
+            "type": "connected",
+            "district_name": runner.env._district_name,
+            "buildings": runner.env.building_names,
+            "max_steps": runner.env.max_steps,
+            "preset": active_preset or "default",
+            "controller_mode": runner.controller_mode,
+            "model_id": runner.model_id,
+            "engine_mode": runner.engine_mode,
+            "engine_name": runner.engine_name,
+            "engine_version": runner.engine_version,
+        }
+    )
 
     async def _sender():
         try:
@@ -199,7 +209,6 @@ async def ws_simulate(
 
 
 async def _handle_control(msg: Dict, runner: SimulationRunner):
-    """Route control messages from frontend to the runner."""
     action = msg.get("action")
     if action == "pause":
         runner.pause()
@@ -215,13 +224,9 @@ async def _handle_control(msg: Dict, runner: SimulationRunner):
     elif action == "clear_emergency":
         runner.clear_emergency()
     elif action == "load_schema":
-        # Allows live schema swapping (not mid-simulation, restarts sim)
         raw_schema = msg.get("schema", {})
         try:
             validated = load_from_dict(raw_schema)
-            runner.env.__init__(schema=validated)
-            runner.env.reset()
+            runner.update_schema(validated)
         except SchemaValidationError:
-            pass  # Keep running existing simulation on bad schema
-
-
+            pass

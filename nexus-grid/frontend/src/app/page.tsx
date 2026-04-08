@@ -55,6 +55,36 @@ export default function Home() {
           animate={{ opacity: 1, y: 0 }}
           style={{ display: "flex", gap: "16px", alignItems: "center" }}
         >
+          {data?.engine_mode && (
+            <div
+              className="status-badge"
+              style={{
+                color: "var(--neon-cyan)",
+                background: "rgba(6, 182, 212, 0.1)",
+                boxShadow: "none",
+              }}
+            >
+              <Cpu size={12} />
+              {data.engine_mode.toUpperCase()} ENGINE
+            </div>
+          )}
+
+          {data?.controller_mode && (
+            <div
+              className="status-badge"
+              style={{
+                color: data.controller_mode === "dqn" ? "var(--neon-blue)" : "var(--neon-amber)",
+                background: data.controller_mode === "dqn"
+                  ? "rgba(59, 130, 246, 0.12)"
+                  : "rgba(245, 158, 11, 0.12)",
+                boxShadow: "none",
+              }}
+            >
+              <Cpu size={12} />
+              {data.controller_mode === "dqn" ? "DQN CONTROL" : "RULE CONTROL"}
+            </div>
+          )}
+
           {data?.forecast_scenario && (
             <div style={{ color: "var(--neon-amber)", display: "flex", alignItems: "center", gap: "8px", fontWeight: 600, background: "rgba(245, 158, 11, 0.1)", padding: "8px 16px", borderRadius: "100px" }}>
               <AlertCircle size={18} />

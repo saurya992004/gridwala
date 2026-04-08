@@ -1,6 +1,8 @@
 # Workspace
 .venv/
 .tools/
+nexus-grid/backend/nexusgrid/models/*
+!nexus-grid/backend/nexusgrid/models/.gitkeep
 
 # Python
 __pycache__/

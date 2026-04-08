@@ -32,6 +32,9 @@ export interface SimulationPayload {
   preset?: string;
   district_name?: string;
   max_steps?: number;
+  controller_mode?: string;
+  model_id?: string;
+  engine_mode?: string;
 }
 
 export function useSimulationWebSocket(presetId: string = 'residential_district') {
