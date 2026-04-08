@@ -1,0 +1,12 @@
+{
+  "district_name": "Pune Industrial Microgrid",
+  "carbon_profile": "india_west_maharashtra",
+  "description": "Mixed industrial site: factory, warehouses, and EV charging hub on Maharashtra grid",
+  "buildings": [
+    { "name": "Assembly Factory",   "type": "industrial",   "battery_kwh": 200.0, "solar_peak_kw": 100.0 },
+    { "name": "Warehouse A",        "type": "industrial",   "battery_kwh": 80.0,  "solar_peak_kw": 50.0  },
+    { "name": "Warehouse B",        "type": "industrial",   "battery_kwh": 80.0,  "solar_peak_kw": 50.0  },
+    { "name": "EV Charging Hub",    "type": "commercial",   "battery_kwh": 150.0, "solar_peak_kw": 60.0  },
+    { "name": "Admin & Canteen",    "type": "commercial",   "battery_kwh": 30.0,  "solar_peak_kw": 15.0  }
+  ]
+}

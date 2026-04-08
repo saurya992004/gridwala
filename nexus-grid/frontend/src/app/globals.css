@@ -1,0 +1,284 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --bg-dark: #030712;           /* Deep space black */
+  --panel-bg: rgba(17, 24, 39, 0.45); /* Very shear dark */
+  --panel-border: rgba(255, 255, 255, 0.08);
+  --panel-glow: rgba(59, 130, 246, 0.15);
+  
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #475569;
+  
+  /* Neon Accents */
+  --neon-blue: #3b82f6;
+  --neon-cyan: #06b6d4;
+  --neon-green: #10b981;
+  --neon-red: #ef4444;
+  --neon-amber: #f59e0b;
+  --neon-purple: #8b5cf6;
+  
+  --font-sans: 'Inter', sans-serif;
+  --font-display: 'Space Grotesk', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  overflow: hidden; /* Hide main scroll for dashboard app feel */
+}
+
+/* 
+  Animated Mesh Background 
+  A slow-moving, gorgeous ethereal glow 
+*/
+.mesh-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1;
+  background-color: #030712;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.15) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(6, 182, 212, 0.1) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
+  animation: bg-pulse 15s ease-in-out infinite alternate;
+}
+
+@keyframes bg-pulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(1.1); opacity: 1; }
+}
+
+/* Typography Enhancements */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #ffffff;
+}
+
+/* 
+  Premium Glassmorphism Panels
+*/
+.glass-panel {
+  background: var(--panel-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--panel-border);
+  border-radius: 20px;
+  box-shadow: 
+    0 4px 24px -1px rgba(0, 0, 0, 0.5), 
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  position: relative;
+}
+
+/* Subtle inner glow for panels */
+.glass-panel::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  opacity: 0.5;
+}
+
+.glass-panel:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 
+    0 8px 32px -1px rgba(0, 0, 0, 0.6), 
+    0 0 20px var(--panel-glow);
+}
+
+/* Custom Scrollbar for sleekness */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* 
+  Premium Buttons 
+*/
+.btn {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 10px 24px;
+  border-radius: 100px; /* Pill shape */
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn::after {
+  content: "";
+  position: absolute;
+  top: 0; left: -100%; width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  transition: 0.5s;
+}
+
+.btn:hover::after {
+  left: 100%;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple));
+  color: white;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+}
+
+.btn-primary:active {
+  transform: scale(0.96);
+}
+
+.btn-danger {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--neon-red);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: var(--neon-red);
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+}
+
+.btn-outline {
+  background: transparent;
+  color: white;
+  border: 1px solid var(--panel-border);
+}
+
+.btn-outline:hover {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.2);
+}
+
+/* Header */
+.top-nav {
+  padding: 20px 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 50;
+  position: relative;
+}
+
+.brand-text {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 700;
+  background: linear-gradient(to right, #fff, #94a3b8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-badge {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 100px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 0 10px currentColor; /* glow */
+}
+
+/* Dashboard Grid Layout */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 3fr 1fr;
+  grid-template-rows: calc(100vh - 100px);
+  gap: 24px;
+  padding: 0 40px 40px 40px;
+  position: relative;
+  z-index: 10;
+}
+
+.main-column {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  height: 100%;
+}
+
+/* Log Stream Enhancements */
+.xai-log-entry {
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  border: 1px solid transparent;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.xai-log-entry.normal {
+  border-left: 4px solid var(--neon-cyan);
+}
+
+.xai-log-entry.warning {
+  border-left: 4px solid var(--neon-amber);
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.05), transparent);
+}
+
+.xai-log-entry.critical {
+  border-left: 4px solid var(--neon-red);
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.1), transparent);
+  animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-red {
+  0% { box-shadow: inset 2px 0 10px rgba(239, 68, 68, 0); }
+  50% { box-shadow: inset 2px 0 20px rgba(239, 68, 68, 0.2); }
+  100% { box-shadow: inset 2px 0 10px rgba(239, 68, 68, 0); }
+}
+
+.metric-card {
+  background: rgba(0,0,0,0.2);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid var(--panel-border);
+}
+
+.metric-value {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  color: white;
+}

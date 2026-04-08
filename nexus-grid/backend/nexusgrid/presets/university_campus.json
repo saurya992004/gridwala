@@ -1,0 +1,13 @@
+{
+  "district_name": "Greenfield University Campus",
+  "carbon_profile": "us_eastern_pjm",
+  "description": "Mixed campus microgrid: lecture halls, dorms, library, and admin building",
+  "buildings": [
+    { "name": "Lecture Hall A",   "type": "commercial",   "battery_kwh": 50.0, "solar_peak_kw": 30.0 },
+    { "name": "Lecture Hall B",   "type": "commercial",   "battery_kwh": 50.0, "solar_peak_kw": 25.0 },
+    { "name": "Student Dorm 1",   "type": "residential",  "battery_kwh": 20.0, "solar_peak_kw": 10.0 },
+    { "name": "Student Dorm 2",   "type": "residential",  "battery_kwh": 20.0, "solar_peak_kw": 10.0 },
+    { "name": "Main Library",     "type": "campus",       "battery_kwh": 40.0, "solar_peak_kw": 20.0 },
+    { "name": "Admin & IT Block", "type": "commercial",   "battery_kwh": 30.0, "solar_peak_kw": 15.0 }
+  ]
+}

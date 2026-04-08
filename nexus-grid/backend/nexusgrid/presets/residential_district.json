@@ -1,0 +1,12 @@
+{
+  "district_name": "Green Valley Residential District",
+  "carbon_profile": "uk_national_grid",
+  "description": "5 typical UK residential homes with rooftop solar and home batteries",
+  "buildings": [
+    { "name": "House 1",  "type": "residential", "battery_kwh": 10.0, "solar_peak_kw": 4.0 },
+    { "name": "House 2",  "type": "residential", "battery_kwh": 13.5, "solar_peak_kw": 5.0 },
+    { "name": "House 3",  "type": "residential", "battery_kwh": 10.0, "solar_peak_kw": 4.0 },
+    { "name": "House 4",  "type": "residential", "battery_kwh": 10.0, "solar_peak_kw": 6.0 },
+    { "name": "House 5",  "type": "residential", "battery_kwh": 13.5, "solar_peak_kw": 5.0 }
+  ]
+}

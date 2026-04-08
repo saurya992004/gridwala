@@ -1,0 +1,55 @@
+# Workspace
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+.eggs/
+*.log
+backend/venv/
+backend/__pycache__/
+backend/nexusgrid/__pycache__/
+backend/nexusgrid/core/__pycache__/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Node.js / Next.js
+node_modules/
+.next/
+out/
+frontend/node_modules/
+frontend/.next/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Tooling notes that should stay local
+nexus-grid/frontend/AGENTS.md
+nexus-grid/frontend/CLAUDE.md
+nexus-grid/frontend/.git.backup/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data / cache
+data/cache/
+*.h5
