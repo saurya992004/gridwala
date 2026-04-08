@@ -1,23 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence, Variants } from "framer-motion";
+import { motion, Variants } from "framer-motion";
 import {
-  Zap,
-  Play,
-  Pause,
   Activity,
-  Cpu,
-  Map as MapIcon,
-  Database,
   AlertCircle,
   CloudLightning,
-  Car,
+  Cpu,
+  Database,
+  Map as MapIcon,
+  Pause,
+  Play,
+  Zap,
 } from "lucide-react";
-import { useSimulationWebSocket } from "@/hooks/useSimulationWebSocket";
+import AssetRoster from "@/components/AssetRoster";
 import DistrictMap from "@/components/DistrictMap";
 import LedgerTable from "@/components/LedgerTable";
+import OperatorDecisionPanel from "@/components/OperatorDecisionPanel";
+import OperationsSummary from "@/components/OperationsSummary";
 import TelemetryCharts from "@/components/TelemetryCharts";
+import { useSimulationWebSocket } from "@/hooks/useSimulationWebSocket";
+
 
 export default function Home() {
   const {
@@ -35,16 +38,16 @@ export default function Home() {
     hidden: { opacity: 0 },
     show: {
       opacity: 1,
-      transition: { staggerChildren: 0.1 },
+      transition: { staggerChildren: 0.08 },
     },
   };
 
   const itemVars: Variants = {
-    hidden: { opacity: 0, y: 20 },
+    hidden: { opacity: 0, y: 18 },
     show: {
       opacity: 1,
       y: 0,
-      transition: { type: "spring", stiffness: 300, damping: 24 },
+      transition: { type: "spring", stiffness: 280, damping: 24 },
     },
   };
 
@@ -53,11 +56,7 @@ export default function Home() {
       <div className="mesh-bg" />
 
       <nav className="top-nav">
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="brand-text"
-        >
+        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="brand-text">
           <div
             style={{
               padding: "8px",
@@ -73,19 +72,12 @@ export default function Home() {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          style={{ display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap" }}
+          style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}
         >
           {data?.engine_mode && (
-            <div
-              className="status-badge"
-              style={{
-                color: "var(--neon-cyan)",
-                background: "rgba(6, 182, 212, 0.1)",
-                boxShadow: "none",
-              }}
-            >
+            <div className="status-badge" style={{ color: "var(--neon-cyan)", background: "rgba(6, 182, 212, 0.1)", boxShadow: "none" }}>
               <Cpu size={12} />
-              {data.engine_mode.toUpperCase()} ENGINE
+              {data.engine_mode.toUpperCase()}
             </div>
           )}
 
@@ -93,10 +85,7 @@ export default function Home() {
             <div
               className="status-badge"
               style={{
-                color:
-                  data.controller_mode === "dqn"
-                    ? "var(--neon-blue)"
-                    : "var(--neon-amber)",
+                color: data.controller_mode === "dqn" ? "var(--neon-blue)" : "var(--neon-amber)",
                 background:
                   data.controller_mode === "dqn"
                     ? "rgba(59, 130, 246, 0.12)"
@@ -105,7 +94,7 @@ export default function Home() {
               }}
             >
               <Cpu size={12} />
-              {data.controller_mode === "dqn" ? "DQN CONTROL" : "RULE CONTROL"}
+              {data.controller_mode === "dqn" ? "DQN" : "RULE"}
             </div>
           )}
 
@@ -113,9 +102,7 @@ export default function Home() {
             <div
               className="status-badge"
               style={{
-                color: data.operating_context_live
-                  ? "var(--neon-green)"
-                  : "var(--neon-amber)",
+                color: data.operating_context_live ? "var(--neon-green)" : "var(--neon-amber)",
                 background: data.operating_context_live
                   ? "rgba(16, 185, 129, 0.1)"
                   : "rgba(245, 158, 11, 0.12)",
@@ -127,35 +114,17 @@ export default function Home() {
             </div>
           )}
 
-          {data?.weather_outlook && (
+          {data?.forecast_scenario && (
             <div
               className="status-badge"
               style={{
-                color: "var(--neon-cyan)",
-                background: "rgba(6, 182, 212, 0.1)",
+                color: "var(--neon-amber)",
+                background: "rgba(245, 158, 11, 0.1)",
                 boxShadow: "none",
               }}
             >
-              <CloudLightning size={12} />
-              WEATHER {data.weather_outlook.toUpperCase()}
-            </div>
-          )}
-
-          {data?.forecast_scenario && (
-            <div
-              style={{
-                color: "var(--neon-amber)",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                fontWeight: 600,
-                background: "rgba(245, 158, 11, 0.1)",
-                padding: "8px 16px",
-                borderRadius: "100px",
-              }}
-            >
-              <AlertCircle size={18} />
-              FORECAST: {data.forecast_scenario.toUpperCase()} IN {data.forecast_steps_left} STEPS
+              <AlertCircle size={12} />
+              {data.forecast_scenario.toUpperCase()} +{data.forecast_steps_left}
             </div>
           )}
 
@@ -163,9 +132,8 @@ export default function Home() {
             className="status-badge"
             style={{
               color: isConnected ? "var(--neon-green)" : "var(--neon-red)",
-              background: isConnected
-                ? "rgba(16, 185, 129, 0.1)"
-                : "rgba(239, 68, 68, 0.1)",
+              background: isConnected ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)",
+              boxShadow: "none",
             }}
           >
             <Activity size={12} />
@@ -174,65 +142,99 @@ export default function Home() {
         </motion.div>
       </nav>
 
-      <motion.main
-        className="dashboard-grid"
-        variants={containerVars}
-        initial="hidden"
-        animate="show"
-      >
+      <motion.main className="dashboard-grid" variants={containerVars} initial="hidden" animate="show">
         <div className="main-column">
           <motion.div
             variants={itemVars}
             className="glass-panel"
-            style={{ display: "flex", gap: "16px", alignItems: "center" }}
+            style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "18px" }}
           >
-            <button className="btn btn-primary" onClick={togglePause} style={{ minWidth: "140px" }}>
-              {isPaused ? (
-                <>
-                  <Play size={18} /> RESUME
-                </>
-              ) : (
-                <>
-                  <Pause size={18} /> PAUSE
-                </>
-              )}
-            </button>
             <div
               style={{
-                width: "1px",
-                height: "30px",
-                background: "var(--panel-border)",
-                margin: "0 8px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: "16px",
+                flexWrap: "wrap",
               }}
-            />
-            <button className="btn btn-outline" onClick={() => triggerForecast("heatwave", 6)}>
-              <CloudLightning size={18} color="var(--neon-amber)" /> Forecast Heatwave
-            </button>
-            <button className="btn btn-danger" onClick={() => triggerEmergency("carbon_spike")}>
-              <AlertCircle size={18} /> Trigger Carbon Spike
-            </button>
+            >
+              <div>
+                <div style={{ color: "var(--text-muted)", fontSize: "0.76rem", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+                  Intelligent Control Room
+                </div>
+                <h1 style={{ fontSize: "1.5rem", marginTop: "6px" }}>
+                  {data?.district_name || "Adaptive Grid District"}
+                </h1>
+                <div style={{ color: "var(--text-secondary)", marginTop: "8px", maxWidth: "720px", lineHeight: 1.5 }}>
+                  Clean operator layout for live weather, carbon, tariff, market, and fleet signals. The websocket stays lean; the dashboard does the interpretation.
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                <button className="btn btn-primary" onClick={togglePause} style={{ minWidth: "138px" }}>
+                  {isPaused ? (
+                    <>
+                      <Play size={18} /> RESUME
+                    </>
+                  ) : (
+                    <>
+                      <Pause size={18} /> PAUSE
+                    </>
+                  )}
+                </button>
+                <button className="btn btn-outline" onClick={() => triggerForecast("heatwave", 6)}>
+                  <CloudLightning size={18} color="var(--neon-amber)" /> Forecast Heatwave
+                </button>
+                <button className="btn btn-danger" onClick={() => triggerEmergency("carbon_spike")}>
+                  <AlertCircle size={18} /> Carbon Spike
+                </button>
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div variants={itemVars}>
+            <OperationsSummary payload={data} />
           </motion.div>
 
           <motion.div
             variants={itemVars}
             className="glass-panel"
-            style={{ flex: 1, display: "flex", flexDirection: "column" }}
+            style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: "360px" }}
           >
-            <div style={{ display: "flex", gap: "16px", marginBottom: "24px" }}>
-              <button
-                className={`btn ${activeTab === "city" ? "btn-primary" : "btn-outline"}`}
-                onClick={() => setActiveTab("city")}
-                style={{ padding: "8px 16px" }}
-              >
-                <MapIcon size={16} /> District Twin
-              </button>
-              <button
-                className={`btn ${activeTab === "economy" ? "btn-primary" : "btn-outline"}`}
-                onClick={() => setActiveTab("economy")}
-                style={{ padding: "8px 16px" }}
-              >
-                <Database size={16} /> P2P Economy
-              </button>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "16px",
+                padding: "20px 20px 0 20px",
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+                  District Twin
+                </div>
+                <h3 style={{ fontSize: "1.1rem", marginTop: "4px" }}>
+                  {activeTab === "city" ? "Asset Theatre" : "Settlement Theatre"}
+                </h3>
+              </div>
+              <div style={{ display: "flex", gap: "12px" }}>
+                <button
+                  className={`btn ${activeTab === "city" ? "btn-primary" : "btn-outline"}`}
+                  onClick={() => setActiveTab("city")}
+                  style={{ padding: "8px 16px" }}
+                >
+                  <MapIcon size={16} /> District Twin
+                </button>
+                <button
+                  className={`btn ${activeTab === "economy" ? "btn-primary" : "btn-outline"}`}
+                  onClick={() => setActiveTab("economy")}
+                  style={{ padding: "8px 16px" }}
+                >
+                  <Database size={16} /> Market Ledger
+                </button>
+              </div>
             </div>
 
             <div
@@ -241,8 +243,10 @@ export default function Home() {
                 display: "flex",
                 overflow: "hidden",
                 border: "1px dashed rgba(255,255,255,0.05)",
-                borderRadius: "12px",
-                background: "rgba(0,0,0,0.1)",
+                borderRadius: "16px",
+                background: "rgba(0,0,0,0.12)",
+                margin: "20px",
+                minHeight: "300px",
               }}
             >
               {activeTab === "city" && data?.buildings ? (
@@ -258,207 +262,33 @@ export default function Home() {
             </div>
           </motion.div>
 
-          <motion.div variants={itemVars} style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "24px" }}>
-            <div style={{ display: "grid", gridTemplateRows: "repeat(3, 1fr)", gap: "12px" }}>
-              <div className="glass-panel metric-card" style={{ padding: "12px" }}>
-                <div
-                  style={{
-                    color: "var(--text-secondary)",
-                    fontSize: "0.8rem",
-                    marginBottom: "4px",
-                    display: "flex",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <span>Grid Carbon Intensity</span>
-                  <CloudLightning size={14} />
-                </div>
-                <div className="metric-value" style={{ fontSize: "1.5rem" }}>
-                  {data?.carbon_intensity !== undefined ? data.carbon_intensity.toFixed(3) : "-"}{" "}
-                  <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>kg/kWh</span>
-                </div>
+          <motion.div variants={itemVars} className="glass-panel" style={{ padding: 0, overflow: "hidden", minHeight: "290px" }}>
+            {history.length > 0 ? (
+              <TelemetryCharts history={history} />
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  minHeight: "290px",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                Collecting data for charts...
               </div>
-
-              <div className="glass-panel metric-card" style={{ padding: "12px" }}>
-                <div
-                  style={{
-                    color: "var(--text-secondary)",
-                    fontSize: "0.8rem",
-                    marginBottom: "4px",
-                    display: "flex",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <span>District Net Load</span>
-                  <Zap size={14} />
-                </div>
-                <div className="metric-value" style={{ fontSize: "1.5rem" }}>
-                  {data?.district_net_consumption !== undefined
-                    ? data.district_net_consumption.toFixed(2)
-                    : "-"}{" "}
-                  <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>kW</span>
-                </div>
-              </div>
-
-              <div className="glass-panel metric-card" style={{ padding: "12px" }}>
-                <div
-                  style={{
-                    color: "var(--text-secondary)",
-                    fontSize: "0.8rem",
-                    marginBottom: "4px",
-                    display: "flex",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <span>{data?.grid_tariff_rate !== undefined ? "Grid Tariff" : "P2P Volume (24h)"}</span>
-                  {data?.grid_tariff_rate !== undefined ? <Zap size={14} /> : <Database size={14} />}
-                </div>
-                <div className="metric-value" style={{ fontSize: "1.5rem" }}>
-                  {data?.grid_tariff_rate !== undefined ? (
-                    <>
-                      {data.grid_tariff_rate.toFixed(3)}{" "}
-                      <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                        {data.grid_tariff_currency || "USD"}/kWh
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      {data?.p2p_volume_kwh !== undefined ? data.p2p_volume_kwh.toFixed(2) : "-"}{" "}
-                      <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>kWh</span>
-                    </>
-                  )}
-                </div>
-                {data?.grid_tariff_rate !== undefined && (
-                  <div style={{ color: "var(--text-secondary)", fontSize: "0.75rem", marginTop: "6px" }}>
-                    {data.grid_tariff_window || "utility"} | Temp{" "}
-                    {data?.ambient_temperature_c !== undefined
-                      ? `${data.ambient_temperature_c.toFixed(1)} C`
-                      : "n/a"}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="glass-panel" style={{ padding: 0, overflow: "hidden", minHeight: "250px" }}>
-              {history.length > 0 ? (
-                <TelemetryCharts history={history} />
-              ) : (
-                <div
-                  style={{
-                    display: "flex",
-                    height: "100%",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    opacity: 0.5,
-                  }}
-                >
-                  Collecting data for charts...
-                </div>
-              )}
-            </div>
+            )}
           </motion.div>
         </div>
 
-        <motion.div variants={itemVars} className="glass-panel" style={{ display: "flex", flexDirection: "column" }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              paddingBottom: "16px",
-              borderBottom: "1px solid var(--panel-border)",
-            }}
-          >
-            <div style={{ padding: "6px", background: "rgba(139, 92, 246, 0.2)", borderRadius: "8px" }}>
-              <Cpu size={18} color="var(--neon-purple)" />
-            </div>
-            <h3 style={{ fontSize: "1.1rem" }}>Cortex AI Stream</h3>
-          </div>
-
-          <div
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              overflowX: "hidden",
-              display: "flex",
-              flexDirection: "column",
-              gap: "12px",
-              paddingTop: "16px",
-            }}
-          >
-            <AnimatePresence>
-              {data?.rationales?.map((rationale, idx) => {
-                let severity = "normal";
-                let icon = (
-                  <Zap size={14} color="var(--neon-cyan)" style={{ marginTop: "3px", flexShrink: 0 }} />
-                );
-
-                if (rationale.includes("PRE-COGNITION")) {
-                  severity = "critical";
-                  icon = (
-                    <AlertCircle
-                      size={14}
-                      color="var(--neon-red)"
-                      style={{ marginTop: "3px", flexShrink: 0 }}
-                    />
-                  );
-                } else if (rationale.includes("spiking") || rationale.includes("disconnected")) {
-                  severity = "warning";
-                  icon = rationale.includes("disconnected") ? (
-                    <Car size={14} color="var(--neon-amber)" style={{ marginTop: "3px", flexShrink: 0 }} />
-                  ) : (
-                    <CloudLightning
-                      size={14}
-                      color="var(--neon-amber)"
-                      style={{ marginTop: "3px", flexShrink: 0 }}
-                    />
-                  );
-                }
-
-                return (
-                  <motion.div
-                    key={idx}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: idx * 0.05 }}
-                    className={`xai-log-entry ${severity}`}
-                  >
-                    <div style={{ display: "flex", gap: "8px", marginBottom: "4px" }}>
-                      {icon}
-                      <strong
-                        style={{
-                          fontSize: "0.80rem",
-                          letterSpacing: "0.05em",
-                          color: "var(--text-secondary)",
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        Agent {idx + 1}
-                      </strong>
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "0.85rem",
-                        lineHeight: 1.5,
-                        color: "var(--text-primary)",
-                        paddingLeft: "22px",
-                      }}
-                    >
-                      {rationale}
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-
-            {!data?.rationales && (
-              <div style={{ opacity: 0.5, textAlign: "center", marginTop: "40px" }}>
-                <Activity size={24} style={{ margin: "0 auto 12px auto", opacity: 0.5 }} />
-                Waiting for telemetry...
-              </div>
-            )}
-          </div>
-        </motion.div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "24px", minHeight: 0 }}>
+          <motion.div variants={itemVars} style={{ minHeight: 0 }}>
+            <OperatorDecisionPanel payload={data} />
+          </motion.div>
+          <motion.div variants={itemVars} style={{ minHeight: 0, flex: 1 }}>
+            <AssetRoster buildings={data?.buildings || []} />
+          </motion.div>
+        </div>
       </motion.main>
     </>
   );

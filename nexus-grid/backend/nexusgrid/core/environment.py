@@ -215,6 +215,7 @@ class NexusGridEnv:
         self._district_name = cfg.get("district_name", "NEXUS District")
         self._carbon_profile = get_profile(cfg.get("carbon_profile", "uk_national_grid"))
         self._carbon_profile_average = float(mean(self._carbon_profile))
+        self._topology_summary = dict(cfg.get("topology_summary", {}))
         self._buildings = [Building(i, building_cfg) for i, building_cfg in enumerate(cfg["buildings"])]
         self._step_count = 0
         self._rng = np.random.default_rng(seed=42)
@@ -426,6 +427,7 @@ class NexusGridEnv:
             "tariff_source": self._tariff_source,
             "operating_context_mode": self._context_mode,
             "operating_context_live": self._context_live,
+            "topology_summary": self._topology_summary,
         }
         self._last_payload = payload
         return payload
@@ -583,6 +585,10 @@ class NexusGridEnv:
     @property
     def operating_context_live(self) -> bool:
         return self._context_live
+
+    @property
+    def topology_summary(self) -> Dict[str, Any]:
+        return self._topology_summary
 
 
 def _safe_int(value: Any, default: int) -> int:

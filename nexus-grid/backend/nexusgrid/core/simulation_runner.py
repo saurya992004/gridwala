@@ -28,12 +28,14 @@ class SimulationRunner:
         self.engine_version = "1.0.0"
         self.operating_context_mode = "static"
         self.operating_context_live = False
+        self.topology_summary = {}
         self.env = NexusGridEnv(schema=schema)
         self.engine_mode = self.env.engine_mode
         self.engine_name = self.env.engine_name
         self.engine_version = self.env.engine_version
         self.operating_context_mode = self.env.operating_context_mode
         self.operating_context_live = self.env.operating_context_live
+        self.topology_summary = self.env.topology_summary
         self._configure_controller(schema=schema, preset_id=preset_id)
 
     def _configure_controller(self, schema: Optional[Dict[str, Any]], preset_id: Optional[str]):
@@ -55,6 +57,7 @@ class SimulationRunner:
         self.engine_version = self.env.engine_version
         self.operating_context_mode = self.env.operating_context_mode
         self.operating_context_live = self.env.operating_context_live
+        self.topology_summary = self.env.topology_summary
         self._emergency = None
         self._configure_controller(schema=schema, preset_id=preset_id)
         self.env.reset()
@@ -144,6 +147,7 @@ class SimulationRunner:
             payload["engine_version"] = self.engine_version
             payload["operating_context_mode"] = self.operating_context_mode
             payload["operating_context_live"] = self.operating_context_live
+            payload["topology_summary"] = self.topology_summary
 
             yield payload
             await asyncio.sleep(delay)

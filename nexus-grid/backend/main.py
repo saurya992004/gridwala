@@ -28,7 +28,7 @@ from nexusgrid.core.simulation_runner import SimulationRunner
 app = FastAPI(
     title="NEXUS GRID API",
     description="AI-powered plug-and-play smart grid orchestration platform",
-    version="2.3.0",
+    version="2.4.0",
 )
 
 app.add_middleware(
@@ -47,18 +47,21 @@ PRESET_META = {
         "description": "5 typical UK residential homes with rooftop solar and home batteries",
         "file": "residential_district.json",
         "geo_seed": "London",
+        "topology_type": "radial_distribution",
     },
     "university_campus": {
         "label": "University Campus",
         "description": "Mixed campus microgrid: lecture halls, dorms, library, admin building",
         "file": "university_campus.json",
         "geo_seed": "Boston",
+        "topology_type": "radial_distribution",
     },
     "industrial_microgrid": {
         "label": "Industrial Microgrid (India)",
         "description": "Factory, warehouses, and EV charging hub on Maharashtra grid",
         "file": "industrial_microgrid.json",
         "geo_seed": "Mumbai",
+        "topology_type": "radial_distribution",
     },
 }
 
@@ -75,7 +78,7 @@ def _engine_descriptor():
 def root():
     return {
         "status": "NEXUS GRID API is running",
-        "version": "2.3.0",
+        "version": "2.4.0",
         **_engine_descriptor(),
     }
 
@@ -85,7 +88,7 @@ def status():
     return {
         "status": "ok",
         "service": "nexus-grid-backend",
-        "version": "2.3.0",
+        "version": "2.4.0",
         **_engine_descriptor(),
         "available_models": len(list_models()),
     }
@@ -107,7 +110,11 @@ def get_preset_schema(preset_id: str):
     path = PRESETS_DIR / PRESET_META[preset_id]["file"]
     try:
         schema = load_from_file(path)
-        return {"preset_id": preset_id, "schema": schema}
+        return {
+            "preset_id": preset_id,
+            "schema": schema,
+            "topology_summary": schema.get("topology_summary"),
+        }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -176,6 +183,20 @@ def validate_schema(payload: SchemaPayload):
             "valid": True,
             "schema": validated,
             "building_count": len(validated["buildings"]),
+            "topology_summary": validated.get("topology_summary"),
+        }
+    except SchemaValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.post("/api/topology/summary", tags=["Topology"])
+def get_topology_summary(payload: SchemaPayload):
+    try:
+        validated = load_from_dict(payload.schema_data)
+        return {
+            **_engine_descriptor(),
+            "topology_summary": validated.get("topology_summary"),
+            "grid_topology": validated.get("grid_topology"),
         }
     except SchemaValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -295,6 +316,7 @@ async def ws_simulate(
             "engine_version": runner.engine_version,
             "operating_context_mode": runner.operating_context_mode,
             "operating_context_live": runner.operating_context_live,
+            "topology_summary": runner.topology_summary,
         }
     )
 

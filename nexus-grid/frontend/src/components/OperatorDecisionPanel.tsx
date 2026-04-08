@@ -1,0 +1,161 @@
+import { AlertCircle, ArrowRight, Brain, CloudLightning, Gauge, Zap } from "lucide-react";
+import { SimulationPayload } from "@/hooks/useSimulationWebSocket";
+
+
+function derivePriority(payload: SimulationPayload | null) {
+  if (!payload) {
+    return {
+      title: "Waiting for telemetry",
+      detail: "The operator deck will populate as soon as the first simulation ticks arrive.",
+      tone: "rgba(30, 41, 59, 0.6)",
+      icon: <Gauge size={16} color="var(--text-secondary)" />,
+    };
+  }
+
+  if (payload.forecast_scenario) {
+    return {
+      title: `Prepare for ${payload.forecast_scenario.replaceAll("_", " ")}`,
+      detail: `The system is staging an intervention in ${payload.forecast_steps_left || 0} steps.`,
+      tone: "rgba(120, 53, 15, 0.35)",
+      icon: <AlertCircle size={16} color="var(--neon-amber)" />,
+    };
+  }
+
+  if (payload.grid_tariff_band === "high") {
+    return {
+      title: "High-cost utility window",
+      detail: "Favor discharge, local balancing, and P2P exchanges while tariffs stay elevated.",
+      tone: "rgba(127, 29, 29, 0.35)",
+      icon: <Zap size={16} color="var(--neon-red)" />,
+    };
+  }
+
+  if ((payload.carbon_intensity || 0) > 0.45) {
+    return {
+      title: "Dirty grid interval",
+      detail: "The controller should reduce imports and lean harder on stored energy.",
+      tone: "rgba(120, 53, 15, 0.35)",
+      icon: <CloudLightning size={16} color="var(--neon-amber)" />,
+    };
+  }
+
+  return {
+    title: "Balanced operating posture",
+    detail: "No acute stressors detected. The controller can optimize for economics and flexibility.",
+    tone: "rgba(8, 47, 73, 0.35)",
+    icon: <Brain size={16} color="var(--neon-cyan)" />,
+  };
+}
+
+
+export default function OperatorDecisionPanel({ payload }: { payload: SimulationPayload | null }) {
+  const decisions = payload?.rationales?.slice(0, 4) || [];
+  const priority = derivePriority(payload);
+
+  return (
+    <div
+      className="glass-panel"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "16px",
+        padding: "20px",
+        minHeight: "360px",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+            Operator Deck
+          </div>
+          <h3 style={{ fontSize: "1.1rem", marginTop: "4px" }}>Control Guidance</h3>
+        </div>
+        <div
+          style={{
+            padding: "10px",
+            borderRadius: "14px",
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.08)",
+          }}
+        >
+          <Brain size={18} color="var(--neon-purple)" />
+        </div>
+      </div>
+
+      <div
+        style={{
+          padding: "16px",
+          borderRadius: "16px",
+          background: priority.tone,
+          border: "1px solid rgba(255,255,255,0.08)",
+          display: "flex",
+          gap: "12px",
+          alignItems: "flex-start",
+        }}
+      >
+        <div style={{ paddingTop: "3px" }}>{priority.icon}</div>
+        <div>
+          <div style={{ fontWeight: 700 }}>{priority.title}</div>
+          <div style={{ color: "var(--text-secondary)", fontSize: "0.9rem", marginTop: "6px", lineHeight: 1.5 }}>
+            {priority.detail}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "12px" }}>
+        <div className="metric-card" style={{ background: "rgba(2, 6, 23, 0.32)" }}>
+          <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+            Policy
+          </div>
+          <div style={{ marginTop: "8px", fontFamily: "var(--font-display)", fontSize: "1.2rem" }}>
+            {payload?.controller_mode?.toUpperCase() || "STANDBY"}
+          </div>
+        </div>
+        <div className="metric-card" style={{ background: "rgba(2, 6, 23, 0.32)" }}>
+          <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+            Context
+          </div>
+          <div style={{ marginTop: "8px", fontFamily: "var(--font-display)", fontSize: "1.2rem" }}>
+            {payload?.operating_context_mode?.replaceAll("_", " ").toUpperCase() || "STATIC"}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+          Agent Decisions
+        </div>
+        {decisions.length ? (
+          decisions.map((decision, index) => (
+            <div
+              key={`agent-${index + 1}`}
+              style={{
+                display: "flex",
+                gap: "10px",
+                alignItems: "flex-start",
+                padding: "12px 14px",
+                borderRadius: "14px",
+                background: "rgba(255,255,255,0.03)",
+                border: "1px solid rgba(255,255,255,0.06)",
+              }}
+            >
+              <ArrowRight size={14} color="var(--neon-cyan)" style={{ marginTop: "4px", flexShrink: 0 }} />
+              <div>
+                <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Agent {index + 1}
+                </div>
+                <div style={{ fontSize: "0.88rem", color: "var(--text-primary)", lineHeight: 1.5, marginTop: "4px" }}>
+                  {decision}
+                </div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+            Decisions will appear here once the controller starts acting on the grid.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
