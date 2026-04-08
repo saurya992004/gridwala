@@ -35,6 +35,16 @@ export interface SimulationPayload {
   controller_mode?: string;
   model_id?: string;
   engine_mode?: string;
+  operating_context_mode?: string;
+  operating_context_live?: boolean;
+  grid_tariff_rate?: number;
+  grid_export_rate?: number;
+  grid_tariff_currency?: string;
+  grid_tariff_window?: string;
+  grid_tariff_band?: string;
+  ambient_temperature_c?: number;
+  solar_capacity_factor?: number;
+  weather_outlook?: string;
 }
 
 export function useSimulationWebSocket(presetId: string = 'residential_district') {

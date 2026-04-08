@@ -477,6 +477,40 @@ class GeoService:
             "warnings": warnings,
         }
 
+    def enrich_existing_schema(
+        self,
+        schema: Dict[str, Any],
+        query: str,
+        provider: str = "auto",
+        weather_provider: str = "auto",
+        carbon_provider: str = "auto",
+        tariff_provider: str = "auto",
+    ) -> Dict[str, Any]:
+        resolution = self.resolve(query=query, provider=provider, limit=5)
+        if not resolution["candidates"]:
+            raise GeoResolutionError(
+                f"Could not resolve '{query}'. Try a more specific query or coordinates."
+            )
+
+        location = LocationCandidate(**resolution["candidates"][0])
+        enrichment = geo_enrichment_service.enrich(
+            location=location.to_dict(),
+            schema=schema,
+            weather_provider=weather_provider,
+            carbon_provider=carbon_provider,
+            tariff_provider=tariff_provider,
+        )
+        enriched_schema = geo_enrichment_service.attach_to_schema(schema=schema, enrichment=enrichment)
+
+        return {
+            "query": query,
+            "provider": resolution["provider"],
+            "location": location.to_dict(),
+            "schema": enriched_schema,
+            "enrichment": enrichment,
+            "warnings": [*resolution["warnings"], *enrichment["warnings"]],
+        }
+
     def enrich_location(
         self,
         query: str,

@@ -329,6 +329,9 @@ class OpenEITariffProvider:
             raise GeoEnrichmentError("OpenEI returned no tariff records for this location.")
 
         energy_rate = _extract_first_energy_rate(item.get("energyratestructure"))
+        current_window, current_rate, rate_band, period_rates, weekday_schedule, weekend_schedule = (
+            _extract_openei_tariff_runtime(item)
+        )
         warnings: List[str] = []
         if matched_sector and requested_sector != matched_sector:
             warnings.append(
@@ -346,6 +349,13 @@ class OpenEITariffProvider:
             "matched_sector": matched_sector,
             "service_type": item.get("servicetype"),
             "energy_rate": energy_rate,
+            "currency": "USD",
+            "current_window": current_window,
+            "current_rate": current_rate,
+            "rate_band": rate_band,
+            "period_rates": period_rates,
+            "weekday_period_schedule": weekday_schedule,
+            "weekend_period_schedule": weekend_schedule,
             "fixed_charge": {
                 "amount": item.get("fixedchargefirstmeter"),
                 "unit": item.get("fixedchargeunits"),
@@ -611,6 +621,68 @@ def _candidate_openei_sectors(primary_sector: str) -> List[Optional[str]]:
         if sector not in unique:
             unique.append(sector)
     return unique
+
+
+def _extract_openei_tariff_runtime(item: Dict[str, Any]) -> Tuple[str, Optional[float], str, Dict[str, float], List[int], List[int]]:
+    period_rates = _extract_period_rates(item.get("energyratestructure"))
+    weekday_schedule = _extract_hour_schedule(item.get("energyweekdayschedule"))
+    weekend_schedule = _extract_hour_schedule(item.get("energyweekendschedule"))
+    is_weekend = _utc_now().weekday() >= 5
+    active_schedule = weekend_schedule if is_weekend else weekday_schedule
+    hour = _utc_now().hour
+    period = active_schedule[hour] if hour < len(active_schedule) else None
+    current_rate = period_rates.get(period) if period is not None else None
+    rate_band = _band_from_reference(current_rate, list(period_rates.values()))
+    window = f"period_{period}" if period is not None else "utility_schedule"
+    return window, current_rate, rate_band, period_rates, weekday_schedule, weekend_schedule
+
+
+def _extract_period_rates(structure: Any) -> Dict[int, float]:
+    period_rates: Dict[int, float] = {}
+    if not isinstance(structure, list):
+        return period_rates
+
+    for period_idx, period in enumerate(structure):
+        if not isinstance(period, list):
+            continue
+        rates = [
+            float(tier.get("rate"))
+            for tier in period
+            if isinstance(tier, dict) and tier.get("rate") is not None
+        ]
+        if rates:
+            period_rates[period_idx] = round(rates[0], 6)
+    return period_rates
+
+
+def _extract_hour_schedule(raw_schedule: Any) -> List[int]:
+    if not isinstance(raw_schedule, list) or not raw_schedule:
+        return []
+    month_index = max(0, min(_utc_now().month - 1, len(raw_schedule) - 1))
+    month_schedule = raw_schedule[month_index]
+    if not isinstance(month_schedule, list):
+        return []
+    return [int(value) for value in month_schedule[:24]]
+
+
+def _band_from_reference(current_rate: Optional[float], reference_rates: List[float]) -> str:
+    if current_rate is None:
+        return "unknown"
+    clean_rates = [float(rate) for rate in reference_rates if rate is not None]
+    if not clean_rates:
+        return "moderate"
+
+    minimum = min(clean_rates)
+    maximum = max(clean_rates)
+    if abs(maximum - minimum) < 1e-9:
+        return "flat"
+
+    midpoint = minimum + ((maximum - minimum) * 0.5)
+    if current_rate <= minimum + ((maximum - minimum) * 0.2):
+        return "low"
+    if current_rate >= midpoint + ((maximum - midpoint) * 0.4):
+        return "high"
+    return "moderate"
 
 
 def _solar_outlook(solar_capacity_factor: float) -> str:

@@ -28,7 +28,7 @@ from nexusgrid.core.simulation_runner import SimulationRunner
 app = FastAPI(
     title="NEXUS GRID API",
     description="AI-powered plug-and-play smart grid orchestration platform",
-    version="2.2.0",
+    version="2.3.0",
 )
 
 app.add_middleware(
@@ -46,16 +46,19 @@ PRESET_META = {
         "label": "Residential District",
         "description": "5 typical UK residential homes with rooftop solar and home batteries",
         "file": "residential_district.json",
+        "geo_seed": "London",
     },
     "university_campus": {
         "label": "University Campus",
         "description": "Mixed campus microgrid: lecture halls, dorms, library, admin building",
         "file": "university_campus.json",
+        "geo_seed": "Boston",
     },
     "industrial_microgrid": {
         "label": "Industrial Microgrid (India)",
         "description": "Factory, warehouses, and EV charging hub on Maharashtra grid",
         "file": "industrial_microgrid.json",
+        "geo_seed": "Mumbai",
     },
 }
 
@@ -72,7 +75,7 @@ def _engine_descriptor():
 def root():
     return {
         "status": "NEXUS GRID API is running",
-        "version": "2.2.0",
+        "version": "2.3.0",
         **_engine_descriptor(),
     }
 
@@ -82,7 +85,7 @@ def status():
     return {
         "status": "ok",
         "service": "nexus-grid-backend",
-        "version": "2.2.0",
+        "version": "2.3.0",
         **_engine_descriptor(),
         "available_models": len(list_models()),
     }
@@ -107,6 +110,33 @@ def get_preset_schema(preset_id: str):
         return {"preset_id": preset_id, "schema": schema}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+def _load_runtime_preset_schema(preset_id: str) -> Optional[Dict]:
+    if preset_id not in PRESET_META:
+        return None
+
+    try:
+        schema = load_from_file(PRESETS_DIR / PRESET_META[preset_id]["file"])
+    except Exception:
+        return None
+
+    geo_seed = PRESET_META[preset_id].get("geo_seed")
+    if not geo_seed:
+        return schema
+
+    try:
+        enriched = geo_service.enrich_existing_schema(
+            schema=schema,
+            query=str(geo_seed),
+            provider="catalog",
+            weather_provider="auto",
+            carbon_provider="auto",
+            tariff_provider="auto",
+        )
+        return enriched["schema"]
+    except (GeoResolutionError, GeoEnrichmentError):
+        return schema
 
 
 class SchemaPayload(BaseModel):
@@ -247,10 +277,7 @@ async def ws_simulate(
     active_preset = preset if preset in PRESET_META else None
     schema = None
     if active_preset:
-        try:
-            schema = load_from_file(PRESETS_DIR / PRESET_META[active_preset]["file"])
-        except Exception:
-            schema = None
+        schema = _load_runtime_preset_schema(active_preset)
 
     runner = SimulationRunner(schema=schema, preset_id=active_preset)
 
@@ -266,6 +293,8 @@ async def ws_simulate(
             "engine_mode": runner.engine_mode,
             "engine_name": runner.engine_name,
             "engine_version": runner.engine_version,
+            "operating_context_mode": runner.operating_context_mode,
+            "operating_context_live": runner.operating_context_live,
         }
     )
 

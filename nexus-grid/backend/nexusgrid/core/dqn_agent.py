@@ -148,6 +148,9 @@ class DQNAgent:
         carbon: float,
         hour: int,
         forecast_scenario: Optional[str] = None,
+        tariff_rate: Optional[float] = None,
+        tariff_band: Optional[str] = None,
+        weather_outlook: Optional[str] = None,
         explore: bool = False,
     ) -> List[float]:
         actions = []
@@ -169,9 +172,48 @@ class DQNAgent:
                     state_tensor = torch.tensor([state], dtype=torch.float32)
                     action_idx = self._q_nets[i](state_tensor).argmax(dim=1).item()
 
-            actions.append(ACTIONS[action_idx])
+            action = ACTIONS[action_idx]
+            action = self._apply_runtime_context(
+                action=action,
+                building=building,
+                carbon=carbon,
+                hour=hour,
+                tariff_rate=tariff_rate,
+                tariff_band=tariff_band,
+                weather_outlook=weather_outlook,
+            )
+            actions.append(action)
 
         return actions
+
+    def _apply_runtime_context(
+        self,
+        action: float,
+        building: dict,
+        carbon: float,
+        hour: int,
+        tariff_rate: Optional[float],
+        tariff_band: Optional[str],
+        weather_outlook: Optional[str],
+    ) -> float:
+        adjusted = action
+        soc = float(building.get("battery_soc", 0.5))
+        solar = float(building.get("solar_generation", 0.0))
+
+        if tariff_band == "high" and soc > 0.22:
+            adjusted = min(adjusted, -0.5)
+        elif tariff_band in {"low", "flat"} and soc < 0.82:
+            adjusted = max(adjusted, 0.5)
+
+        if carbon > 0.48 and soc > 0.2:
+            adjusted = min(adjusted, -0.5)
+
+        if weather_outlook == "constrained" and hour < 12 and soc < 0.72:
+            adjusted = max(adjusted, 0.5)
+        elif weather_outlook == "strong" and solar < 0.8 and hour < 11 and adjusted > 0.0:
+            adjusted = min(adjusted, 0.0)
+
+        return round(max(-1.0, min(1.0, adjusted)), 4)
 
     def store_transition(
         self,
@@ -265,6 +307,10 @@ class DQNAgent:
         carbon: float,
         actions: List[float],
         forecast_scenario: Optional[str] = None,
+        tariff_rate: Optional[float] = None,
+        tariff_band: Optional[str] = None,
+        tariff_window: Optional[str] = None,
+        weather_outlook: Optional[str] = None,
     ) -> List[str]:
         rationales = []
         for i, building in enumerate(buildings):
@@ -287,6 +333,19 @@ class DQNAgent:
                 rationales.append(
                     f"PRE-COGNITION OVERRIDE - Stockpiling for {forecast_scenario}. "
                     f"SoC: {int(soc * 100)}%."
+                )
+            elif tariff_band == "high" and action <= -0.5:
+                rationales.append(
+                    f"DQN -> MARKET DISCHARGE - Tariff window {tariff_window or 'high'} at "
+                    f"{tariff_rate if tariff_rate is not None else 0.0:.3f}. "
+                    f"Discharging into an expensive grid period.{p2p_str}{q_str}"
+                )
+            elif tariff_band in {"low", "flat"} and action >= 0.5:
+                rationales.append(
+                    f"DQN -> MARKET CHARGE - Cheap utility window "
+                    f"{tariff_window or tariff_band or 'low'} at "
+                    f"{tariff_rate if tariff_rate is not None else 0.0:.3f}. "
+                    f"Charging ahead of a likely higher-cost period.{q_str}"
                 )
             elif action >= 0.8:
                 rationales.append(
@@ -313,7 +372,7 @@ class DQNAgent:
             else:
                 rationales.append(
                     f"DQN -> Idle - No clear arbitrage opportunity. SoC: {int(soc * 100)}%. "
-                    f"Carbon: {carbon:.3f}.{q_str}"
+                    f"Carbon: {carbon:.3f}. Weather: {weather_outlook or 'steady'}.{q_str}"
                 )
 
         return rationales

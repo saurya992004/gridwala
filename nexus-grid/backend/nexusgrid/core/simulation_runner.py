@@ -26,10 +26,14 @@ class SimulationRunner:
         self.engine_mode = "sandbox"
         self.engine_name = "nexus-sandbox-engine"
         self.engine_version = "1.0.0"
+        self.operating_context_mode = "static"
+        self.operating_context_live = False
         self.env = NexusGridEnv(schema=schema)
         self.engine_mode = self.env.engine_mode
         self.engine_name = self.env.engine_name
         self.engine_version = self.env.engine_version
+        self.operating_context_mode = self.env.operating_context_mode
+        self.operating_context_live = self.env.operating_context_live
         self._configure_controller(schema=schema, preset_id=preset_id)
 
     def _configure_controller(self, schema: Optional[Dict[str, Any]], preset_id: Optional[str]):
@@ -49,6 +53,8 @@ class SimulationRunner:
         self.engine_mode = self.env.engine_mode
         self.engine_name = self.env.engine_name
         self.engine_version = self.env.engine_version
+        self.operating_context_mode = self.env.operating_context_mode
+        self.operating_context_live = self.env.operating_context_live
         self._emergency = None
         self._configure_controller(schema=schema, preset_id=preset_id)
         self.env.reset()
@@ -88,24 +94,38 @@ class SimulationRunner:
                         carbon=last_payload["carbon_intensity"],
                         hour=last_payload.get("hour", 0),
                         forecast_scenario=forecast_scenario,
+                        tariff_rate=last_payload.get("grid_tariff_rate"),
+                        tariff_band=last_payload.get("grid_tariff_band"),
+                        weather_outlook=last_payload.get("weather_outlook"),
                     )
                     rationales = self.agent.explain(
                         buildings=last_payload["buildings"],
                         carbon=last_payload["carbon_intensity"],
                         actions=actions,
                         forecast_scenario=forecast_scenario,
+                        tariff_rate=last_payload.get("grid_tariff_rate"),
+                        tariff_band=last_payload.get("grid_tariff_band"),
+                        tariff_window=last_payload.get("grid_tariff_window"),
+                        weather_outlook=last_payload.get("weather_outlook"),
                     )
                 else:
                     actions = self.rule_agent.decide(
                         buildings=last_payload["buildings"],
                         carbon_intensity=last_payload["carbon_intensity"],
                         forecast_scenario=forecast_scenario,
+                        tariff_rate=last_payload.get("grid_tariff_rate"),
+                        tariff_band=last_payload.get("grid_tariff_band"),
+                        weather_outlook=last_payload.get("weather_outlook"),
                     )
                     rationales = self.rule_agent.explain(
                         buildings=last_payload["buildings"],
                         carbon_intensity=last_payload["carbon_intensity"],
                         actions=actions,
                         forecast_scenario=forecast_scenario,
+                        tariff_rate=last_payload.get("grid_tariff_rate"),
+                        tariff_band=last_payload.get("grid_tariff_band"),
+                        tariff_window=last_payload.get("grid_tariff_window"),
+                        weather_outlook=last_payload.get("weather_outlook"),
                     )
             else:
                 actions = None
@@ -122,6 +142,8 @@ class SimulationRunner:
             payload["engine_mode"] = self.engine_mode
             payload["engine_name"] = self.engine_name
             payload["engine_version"] = self.engine_version
+            payload["operating_context_mode"] = self.operating_context_mode
+            payload["operating_context_live"] = self.operating_context_live
 
             yield payload
             await asyncio.sleep(delay)
