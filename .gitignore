@@ -1,5 +1,6 @@
 # Workspace
 .venv/
+.tools/
 
 # Python
 __pycache__/
