@@ -26,7 +26,12 @@ def run_geo_smoke_test():
     print(f"      [OK] Coordinate candidate: {top_coordinate['display_name']}")
     print(f"      Provider used: {resolved_coordinates['provider']}")
 
-    print("\n[3/3] Generating atlas-seed schema...")
+    print("\n[3/4] Checking provider catalog...")
+    providers = geo_service.list_providers()
+    assert any(provider["id"] == "open_meteo" for provider in providers), "Expected Open-Meteo geocoder in provider list."
+    print("      [OK] Open-Meteo geocoder is registered.")
+
+    print("\n[4/4] Generating atlas-seed schema...")
     generated = geo_service.generate_schema(
         query="Chennai",
         provider="catalog",

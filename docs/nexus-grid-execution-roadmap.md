@@ -23,6 +23,7 @@ Current truth:
 - Electricity Maps is currently integrated as a **live carbon signal provider**
 - the current Electricity Maps token is still **sandbox-mode**, so carbon data is provider-side sandbox until the production key is approved
 - the UI has been reframed as an operator control room, but the city-selection and full map-first twin flow are still ahead
+- the chosen map stack is now: **Open-Meteo Geocoding + MapLibre + PMTiles + Overture + Electricity Maps**
 
 ## Short Answer
 
@@ -132,12 +133,14 @@ Deliverables:
 - geo twin builder that outputs controllable assets, feeders, and demand clusters
 - map-first city selection flow
 - provenance panel showing which parts came from live APIs vs inference
+- free/open map foundation using Open-Meteo Geocoding, MapLibre, PMTiles, and Overture
 
 Core product opinion:
 
 - **Electricity Maps should be the live signal spine, not the full simulation engine**
 - we should not clone their map product
 - we should use their signals, then generate a richer control-ready twin that they do not provide
+- we should avoid paid map lock-in unless it becomes strictly necessary for premium UX
 
 ### Phase 2C: Grid Events And Constraints
 
@@ -243,7 +246,8 @@ That means:
 These are the APIs and data sources we are most likely to need as we continue:
 
 - **Electricity Maps production key** for real carbon and signal coverage
-- **OpenStreetMap / Overpass data access** for richer map object extraction
+- **Open-Meteo Geocoding** for free city search and resolver fallback
+- **Overture / PMTiles data pipeline** for map-native twin enrichment
 - **A stronger weather or irradiance source** if we outgrow Open-Meteo for serious demos
 - **Non-U.S. tariff sources** if we want global price realism beyond heuristics
 

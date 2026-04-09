@@ -27,6 +27,10 @@ DEFAULT_NOMINATIM_URL = os.getenv(
     "NEXUS_NOMINATIM_BASE_URL",
     "https://nominatim.openstreetmap.org/search",
 )
+DEFAULT_OPEN_METEO_GEOCODING_URL = os.getenv(
+    "NEXUS_OPEN_METEO_GEOCODING_URL",
+    "https://geocoding-api.open-meteo.com/v1/search",
+)
 DEFAULT_NOMINATIM_USER_AGENT = os.getenv(
     "NEXUS_NOMINATIM_USER_AGENT",
     "NEXUS-GRID/1.0 (atlas-seed geocoder)",
@@ -118,6 +122,65 @@ class CatalogLocationProvider:
             importance=float(item.get("importance", 0.0)),
             source=self.name,
         )
+
+
+class OpenMeteoGeocodingProvider:
+    name = "open_meteo"
+
+    def __init__(
+        self,
+        base_url: str = DEFAULT_OPEN_METEO_GEOCODING_URL,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    ):
+        self.base_url = base_url
+        self.timeout_seconds = timeout_seconds
+
+    def resolve(self, query: str, limit: int = 5) -> List[LocationCandidate]:
+        params = {
+            "name": query,
+            "count": max(1, min(limit, 100)),
+            "language": "en",
+            "format": "json",
+        }
+        request = Request(
+            f"{self.base_url}?{urlencode(params)}",
+            headers={
+                "User-Agent": DEFAULT_NOMINATIM_USER_AGENT,
+            },
+        )
+
+        try:
+            with urlopen(request, timeout=self.timeout_seconds) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError) as exc:
+            raise GeoResolutionError(f"Open-Meteo geocoding failed: {exc}") from exc
+
+        results = payload.get("results", [])
+        candidates: List[LocationCandidate] = []
+        for item in results:
+            candidates.append(
+                LocationCandidate(
+                    display_name=str(
+                        item.get("name")
+                        or item.get("admin1")
+                        or item.get("country")
+                        or "Unknown location"
+                    ),
+                    latitude=float(item.get("latitude", 0.0)),
+                    longitude=float(item.get("longitude", 0.0)),
+                    country=str(item.get("country", "Unknown")),
+                    country_code=str(item.get("country_code", "custom")).lower(),
+                    state=str(item.get("admin1", item.get("admin2", "Unknown"))),
+                    city=str(item.get("name", "Unknown")),
+                    locality=str(item.get("name", "Unknown")),
+                    category="place",
+                    type=str(item.get("feature_code", "place")).lower(),
+                    importance=float(item.get("population", 0.0) or 0.0),
+                    source=self.name,
+                )
+            )
+
+        return candidates
 
 
 class NominatimLocationProvider:
@@ -579,6 +642,7 @@ class GeoService:
         self.providers: Dict[str, LocationProvider] = {
             "coordinates": CoordinateLocationProvider(),
             "catalog": CatalogLocationProvider(),
+            "open_meteo": OpenMeteoGeocodingProvider(),
             "nominatim": NominatimLocationProvider(),
         }
         self.builder = GeoTwinBuilder()
@@ -606,6 +670,13 @@ class GeoService:
                 "kind": "local",
                 "requires_api_key": False,
                 "notes": "Offline-friendly seeded locations for demos and tests.",
+            },
+            {
+                "id": "open_meteo",
+                "label": "Open-Meteo Geocoding",
+                "kind": "remote",
+                "requires_api_key": False,
+                "notes": "Free city and locality search without paid map lock-in.",
             },
             {
                 "id": "nominatim",
@@ -842,10 +913,10 @@ class GeoService:
 
     def _provider_order(self, provider: str) -> List[str]:
         if provider == "auto":
-            return ["coordinates", "catalog", "nominatim"]
+            return ["coordinates", "catalog", "open_meteo", "nominatim"]
         if provider not in self.providers:
             raise GeoResolutionError(
-                f"Unknown geo provider '{provider}'. Use one of: auto, coordinates, catalog, nominatim."
+                f"Unknown geo provider '{provider}'. Use one of: auto, coordinates, catalog, open_meteo, nominatim."
             )
         return [provider]
 
