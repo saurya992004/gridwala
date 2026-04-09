@@ -15,11 +15,11 @@ import {
 } from "lucide-react";
 import AssetRoster from "@/components/AssetRoster";
 import CityTwinLaunchPanel from "@/components/CityTwinLaunchPanel";
-import ControlEntitiesPanel from "@/components/ControlEntitiesPanel";
 import LedgerTable from "@/components/LedgerTable";
 import OperatorDecisionPanel from "@/components/OperatorDecisionPanel";
 import SignalDock from "@/components/SignalDock";
 import TelemetryCharts from "@/components/TelemetryCharts";
+import TopologyStressPanel from "@/components/TopologyStressPanel";
 import TwinMapCanvas from "@/components/TwinMapCanvas";
 import TwinProvenancePanel from "@/components/TwinProvenancePanel";
 import {
@@ -71,7 +71,6 @@ export default function Home() {
     twinError,
     togglePause,
     triggerEmergency,
-    triggerForecast,
     loadCityTwin,
   } = useSimulationWebSocket();
   const [featuredLocations, setFeaturedLocations] = useState<GeoFeaturedLocation[]>(
@@ -144,7 +143,12 @@ export default function Home() {
     }
 
     if (intelView === "network") {
-      return <ControlEntitiesPanel controlEntities={data?.control_entities || []} />;
+      return (
+        <TopologyStressPanel
+          topologyRuntime={data?.topology_runtime}
+          controlEntities={data?.control_entities || []}
+        />
+      );
     }
 
     if (intelView === "fleet") {
@@ -255,7 +259,7 @@ export default function Home() {
               <div className="map-stage-eyebrow">Intelligence Terminal</div>
               <h1 className="map-stage-title">{currentLocality}</h1>
               <div className="map-stage-copy">
-                Map-first digital twin view with city launch, synthetic feeder geometry, and control entities layered around live operating context.
+                Map-first digital twin view with city launch, feeder constraints, outage drills, and live regional operating context layered into the control room.
               </div>
             </div>
 
@@ -271,13 +275,13 @@ export default function Home() {
                   </>
                 )}
               </button>
-              <button className="btn btn-outline" onClick={() => triggerForecast("heatwave", 6)}>
+              <button className="btn btn-outline" onClick={() => triggerEmergency("congestion_wave")}>
                 <CloudLightning size={18} color="var(--neon-amber)" />
-                Forecast
+                Congestion
               </button>
-              <button className="btn btn-danger" onClick={() => triggerEmergency("carbon_spike")}>
+              <button className="btn btn-danger" onClick={() => triggerEmergency("feeder_fault")}>
                 <AlertCircle size={18} />
-                Carbon Spike
+                Feeder Fault
               </button>
             </div>
           </div>
@@ -288,6 +292,7 @@ export default function Home() {
               buildings={data?.buildings || []}
               controlEntities={data?.control_entities || []}
               twinSummary={data?.twin_summary}
+              topologyRuntime={data?.topology_runtime}
             />
           </div>
         </motion.section>

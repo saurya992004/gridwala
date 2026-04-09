@@ -21,6 +21,25 @@ function derivePriority(payload: SimulationPayload | null) {
     };
   }
 
+  if ((payload.topology_runtime?.active_events || []).length > 0) {
+    const activeEvent = payload.topology_runtime?.active_events?.[0];
+    return {
+      title: activeEvent?.label || "Topology event in progress",
+      detail: activeEvent?.summary || "The network is operating through a live feeder or line event.",
+      tone: "rgba(127, 29, 29, 0.35)",
+      icon: <AlertCircle size={16} color="var(--neon-red)" />,
+    };
+  }
+
+  if ((payload.topology_runtime?.constrained_feeders || 0) > 0) {
+    return {
+      title: "Feeder stress rising",
+      detail: "One or more feeders are entering constrained operation. Prioritize headroom preservation and reduce avoidable imports.",
+      tone: "rgba(120, 53, 15, 0.35)",
+      icon: <Gauge size={16} color="var(--neon-amber)" />,
+    };
+  }
+
   if (
     payload.operating_context_live &&
     typeof payload.grid_renewable_share_pct === "number" &&

@@ -13,6 +13,10 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 from nexusgrid.core.carbon_profiles import get_profile
+from nexusgrid.core.topology_runtime import (
+    evaluate_topology_runtime,
+    prepare_topology_runtime,
+)
 
 
 HOURS_PER_DAY = 24
@@ -93,6 +97,7 @@ class Building:
     def __init__(self, building_id: int, config: Dict[str, Any]):
         self.id = config.get("name", f"Building_{building_id + 1}")
         self._bid = building_id
+        self.bus_id = str(config.get("bus_id", ""))
         self.BATTERY_CAPACITY = float(config.get("battery_kwh", 10.0))
         self.BATTERY_MAX_RATE = float(config.get("battery_max_rate_kw", 3.0))
         self.SOLAR_PEAK_KW = float(config.get("solar_peak_kw", 5.0))
@@ -158,6 +163,7 @@ class Building:
 
         return {
             "id": self.id,
+            "bus_id": self.bus_id,
             "type": self.type,
             "is_ev_away": self._ev_away if self.is_ev else False,
             "net_electricity_consumption": net,
@@ -224,6 +230,18 @@ class NexusGridEnv:
         self._enrichment_warnings = list(cfg.get("enrichment_warnings", []))
         self._control_entities = [dict(entity) for entity in cfg.get("control_entities", [])]
         self._buildings = [Building(i, building_cfg) for i, building_cfg in enumerate(cfg["buildings"])]
+        self._topology_runtime_context = prepare_topology_runtime(cfg)
+        self._feeder_capacity_multipliers = {
+            str(feeder.get("id", "primary_feeder")): 1.0
+            for feeder in self._topology_runtime_context.get("feeders", [])
+        }
+        self._line_capacity_multipliers = {
+            str(line.get("id", "line")): 1.0
+            for line in self._topology_runtime_context.get("lines", [])
+        }
+        self._outaged_feeders: set[str] = set()
+        self._outaged_lines: set[str] = set()
+        self._active_grid_events: List[Dict[str, Any]] = []
         self._step_count = 0
         self._rng = np.random.default_rng(seed=42)
         self._last_payload: Optional[Dict[str, Any]] = None
@@ -281,6 +299,7 @@ class NexusGridEnv:
         self._emergency_steps_left = 0
         self._forecast_scenario: Optional[str] = None
         self._forecast_steps_left = 0
+        self._topology_runtime = self._compute_topology_runtime(self.seed_buildings)
 
     def reset(self) -> List[Dict]:
         for building in self._buildings:
@@ -293,6 +312,8 @@ class NexusGridEnv:
         self._emergency_steps_left = 0
         self._forecast_scenario = None
         self._forecast_steps_left = 0
+        self._clear_topology_events()
+        self._topology_runtime = self._compute_topology_runtime(self.seed_buildings)
         return [{"id": building.id, "battery_soc": 0.5} for building in self._buildings]
 
     def step(self, actions: Optional[List[float]] = None) -> Dict[str, Any]:
@@ -409,6 +430,7 @@ class NexusGridEnv:
                 self.clear_emergency()
 
         district_net = round(sum(b["net_electricity_consumption"] for b in buildings_data), 4)
+        self._topology_runtime = self._compute_topology_runtime(buildings_data)
 
         payload = {
             "step": self._step_count,
@@ -434,6 +456,7 @@ class NexusGridEnv:
             "weather_source": self._weather_source,
             "carbon_source": self._carbon_source,
             "tariff_source": self._tariff_source,
+            "topology_runtime": self._topology_runtime,
             "operating_context_mode": self._context_mode,
             "operating_context_live": self._context_live,
             "electricity_maps_zone": self._grid_signal_spine.get("zone"),
@@ -562,12 +585,22 @@ class NexusGridEnv:
         elif scenario == "heatwave":
             self._load_mult = 2.0
             self._emergency_steps_left = 8
+        elif scenario == "congestion_wave":
+            self._apply_congestion_wave()
+            self._emergency_steps_left = 8
+        elif scenario == "line_derating":
+            self._apply_line_derating()
+            self._emergency_steps_left = 8
+        elif scenario == "feeder_fault":
+            self._apply_feeder_fault()
+            self._emergency_steps_left = 6
 
     def clear_emergency(self):
         self._solar_mult = 1.0
         self._load_mult = 1.0
         self._carbon_mult = 1.0
         self._emergency_steps_left = 0
+        self._clear_topology_events()
 
     def set_forecast(self, scenario: str, steps_ahead: int = 4):
         self._forecast_scenario = scenario
@@ -586,6 +619,7 @@ class NexusGridEnv:
         return [
             {
                 "id": building.id,
+                "bus_id": building.bus_id,
                 "type": building.type,
                 "is_ev_away": False,
                 "net_electricity_consumption": 0.0,
@@ -667,6 +701,134 @@ class NexusGridEnv:
     @property
     def grid_signal_spine(self) -> Dict[str, Any]:
         return self._grid_signal_spine
+
+    @property
+    def topology_runtime(self) -> Dict[str, Any]:
+        return self._topology_runtime
+
+    def _compute_topology_runtime(self, buildings_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+        return evaluate_topology_runtime(
+            runtime_context=self._topology_runtime_context,
+            buildings_data=buildings_data,
+            feeder_capacity_multipliers=self._feeder_capacity_multipliers,
+            line_capacity_multipliers=self._line_capacity_multipliers,
+            outaged_feeders=self._outaged_feeders,
+            outaged_lines=self._outaged_lines,
+            active_events=self._runtime_grid_events(),
+        )
+
+    def _clear_topology_events(self):
+        self._feeder_capacity_multipliers = {
+            feeder_id: 1.0 for feeder_id in self._feeder_capacity_multipliers
+        }
+        self._line_capacity_multipliers = {
+            line_id: 1.0 for line_id in self._line_capacity_multipliers
+        }
+        self._outaged_feeders.clear()
+        self._outaged_lines.clear()
+        self._active_grid_events = []
+
+    def _runtime_grid_events(self) -> List[Dict[str, Any]]:
+        if not self._active_grid_events:
+            return []
+
+        events: List[Dict[str, Any]] = []
+        for event in self._active_grid_events:
+            runtime_event = dict(event)
+            runtime_event["steps_left"] = self._emergency_steps_left
+            events.append(runtime_event)
+        return events
+
+    def _apply_congestion_wave(self):
+        self._clear_topology_events()
+        for feeder_id in self._feeder_capacity_multipliers:
+            self._feeder_capacity_multipliers[feeder_id] = 0.03
+        self._load_mult = max(self._load_mult, 1.45)
+        self._active_grid_events = [
+            {
+                "id": "congestion_wave",
+                "kind": "congestion",
+                "severity": "high",
+                "label": "Congestion Wave",
+                "target": "district-wide",
+                "summary": "Feeder headroom is derated across the district to simulate a constrained distribution window.",
+            }
+        ]
+
+    def _apply_line_derating(self):
+        self._clear_topology_events()
+        target_line = self._select_line_for_event()
+        if not target_line:
+            return
+        self._line_capacity_multipliers[target_line["line_id"]] = 0.04
+        self._active_grid_events = [
+            {
+                "id": f"line_derating::{target_line['line_id']}",
+                "kind": "derating",
+                "severity": "high",
+                "label": "Line Derating",
+                "target": target_line["line_id"],
+                "summary": "A constrained branch has reduced transfer capacity and needs active feeder management.",
+            }
+        ]
+
+    def _apply_feeder_fault(self):
+        self._clear_topology_events()
+        target_feeder = self._select_feeder_for_event()
+        if not target_feeder:
+            return
+        feeder_id = str(target_feeder["feeder_id"])
+        self._outaged_feeders.add(feeder_id)
+        head_line_id = self._topology_runtime_context.get("head_line_by_feeder", {}).get(feeder_id)
+        if head_line_id:
+            self._outaged_lines.add(head_line_id)
+        self._active_grid_events = [
+            {
+                "id": f"feeder_fault::{feeder_id}",
+                "kind": "outage",
+                "severity": "critical",
+                "label": "Feeder Fault",
+                "target": feeder_id,
+                "summary": f"{feeder_id.replace('_', ' ').title()} is isolated and operating as an outage scenario.",
+            }
+        ]
+
+    def _select_feeder_for_event(self) -> Optional[Dict[str, Any]]:
+        feeder_states = self._topology_runtime.get("feeder_states", [])
+        if feeder_states:
+            return max(
+                feeder_states,
+                key=lambda feeder: (float(feeder.get("loading_pct", 0.0)), int(feeder.get("n_assets", 0))),
+            )
+        feeders = self._topology_runtime_context.get("feeders", [])
+        if not feeders:
+            return None
+        return {"feeder_id": str(feeders[0].get("id", "primary_feeder"))}
+
+    def _select_line_for_event(self) -> Optional[Dict[str, Any]]:
+        line_states = [
+            line for line in self._topology_runtime.get("line_states", [])
+            if not line.get("is_outaged")
+        ]
+        if line_states and max(float(line.get("loading_pct", 0.0)) for line in line_states) > 0:
+            return max(
+                line_states,
+                key=lambda line: (float(line.get("loading_pct", 0.0)), float(line.get("capacity_kw", 0.0))),
+            )
+        lines = self._topology_runtime_context.get("lines", [])
+        if not lines:
+            return None
+        head_lines = set(self._topology_runtime_context.get("head_line_by_feeder", {}).values())
+        candidate_lines = [
+            dict(line)
+            for line in lines
+            if str(line.get("id", "")) not in head_lines
+        ] or [dict(line) for line in lines]
+        target_line = min(
+            candidate_lines,
+            key=lambda line: float(line.get("capacity_kw", 0.0)),
+        )
+        return {"line_id": str(target_line.get("id", "line_1"))}
 
 
 def _safe_int(value: Any, default: int) -> int:

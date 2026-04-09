@@ -13,6 +13,7 @@ import {
   BuildingState,
   ControlEntity,
   GeoContext,
+  TopologyRuntime,
   TwinSummary,
 } from "@/hooks/useSimulationWebSocket";
 
@@ -24,8 +25,8 @@ let pmtilesRegistered = false;
 type TwinFeatureSet = {
   center: FeatureCollection<Point>;
   assets: FeatureCollection<Point>;
-  feeders: FeatureCollection<LineString>;
-  centroids: FeatureCollection<Point>;
+  feederHeads: FeatureCollection<Point>;
+  lines: FeatureCollection<LineString>;
 };
 
 function hashValue(input: string) {
@@ -39,6 +40,14 @@ function hashValue(input: string) {
 
 function safeId(value: unknown, fallback: string) {
   return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+function statusColor(status: string) {
+  if (status === "outage") return "#ef4444";
+  if (status === "overload") return "#fb7185";
+  if (status === "critical") return "#f59e0b";
+  if (status === "warning") return "#fde047";
+  return "#06b6d4";
 }
 
 function assetColor(assetType: string) {
@@ -91,13 +100,31 @@ function fallbackMapStyle(): StyleSpecification {
   };
 }
 
+function coordinateForFeeder(
+  feederId: string,
+  center: [number, number],
+  index: number,
+  total: number,
+): [number, number] {
+  const [longitude, latitude] = center;
+  const jitter = (hashValue(feederId) % 1000) / 1000;
+  const angleBase = (Math.PI * 2 * index) / Math.max(total, 1);
+  const angle = angleBase + (jitter * 0.32);
+  const radius = 0.0038 + (jitter * 0.0012);
+  const lngDelta = (radius * Math.cos(angle)) / Math.max(Math.cos((latitude * Math.PI) / 180), 0.25);
+  const latDelta = radius * Math.sin(angle);
+  return [longitude + lngDelta, latitude + latDelta];
+}
+
 function buildTwinFeatures(
   center: [number, number],
   buildings: BuildingState[],
   controlEntities: ControlEntity[],
+  topologyRuntime?: TopologyRuntime,
 ): TwinFeatureSet {
   const [longitude, latitude] = center;
-  const coordinateMap = new Map<string, [number, number]>();
+  const assetCoordinates = new Map<string, [number, number]>();
+  const busCoordinates = new Map<string, [number, number]>();
   const assets: Feature<Point>[] = [];
 
   buildings.forEach((building, index) => {
@@ -109,11 +136,11 @@ function buildTwinFeatures(
     const angle = angleOffset + (jitter * 0.35);
     const lngDelta = (radius * Math.cos(angle)) / Math.max(Math.cos((latitude * Math.PI) / 180), 0.25);
     const latDelta = radius * Math.sin(angle);
-    const assetCoordinate: [number, number] = [
-      longitude + lngDelta,
-      latitude + latDelta,
-    ];
-    coordinateMap.set(buildingId, assetCoordinate);
+    const assetCoordinate: [number, number] = [longitude + lngDelta, latitude + latDelta];
+    assetCoordinates.set(buildingId, assetCoordinate);
+    if (building.bus_id) {
+      busCoordinates.set(building.bus_id, assetCoordinate);
+    }
 
     assets.push({
       type: "Feature",
@@ -135,54 +162,77 @@ function buildTwinFeatures(
     });
   });
 
-  const feeders: Feature<LineString>[] = [];
-  const centroids: Feature<Point>[] = [];
-  controlEntities.forEach((entity, index) => {
-    const entityId = safeId(entity.id, `entity-${index + 1}`);
-    const entityLabel = typeof entity.label === "string" ? entity.label : entityId;
-    const entityRole = typeof entity.role === "string" ? entity.role : "grid_operator";
-    const memberBuildings = Array.isArray(entity.member_buildings) ? entity.member_buildings : [];
-    const memberCoordinates = memberBuildings
-      .map((member) => coordinateMap.get(member))
-      .filter((coordinate): coordinate is [number, number] => Boolean(coordinate));
+  const feederIds = Array.from(
+    new Set(
+      (topologyRuntime?.feeder_states || [])
+        .map((feeder) => feeder.feeder_id)
+        .filter((value): value is string => typeof value === "string" && value.length > 0),
+    ),
+  );
+  if (!feederIds.length) {
+    controlEntities.forEach((entity) => {
+      if (entity.feeder_id && !feederIds.includes(entity.feeder_id)) {
+        feederIds.push(entity.feeder_id);
+      }
+    });
+  }
 
-    if (!memberCoordinates.length) {
-      return;
-    }
+  const feederHeadCoordinates = new Map<string, [number, number]>();
+  feederIds.forEach((feederId, index) => {
+    feederHeadCoordinates.set(feederId, coordinateForFeeder(feederId, center, index, feederIds.length));
+  });
 
-    const centroid: [number, number] = [
-      memberCoordinates.reduce((sum, coordinate) => sum + coordinate[0], 0) / memberCoordinates.length,
-      memberCoordinates.reduce((sum, coordinate) => sum + coordinate[1], 0) / memberCoordinates.length,
-    ];
-
-    centroids.push({
+  const feederHeads: Feature<Point>[] = feederIds.map((feederId) => {
+    const feederState = (topologyRuntime?.feeder_states || []).find((item) => item.feeder_id === feederId);
+    return {
       type: "Feature",
       geometry: {
         type: "Point",
-        coordinates: centroid,
+        coordinates: feederHeadCoordinates.get(feederId) || center,
       },
       properties: {
-        id: entityId,
-        label: entityLabel,
-        role: entityRole,
-        memberCount: memberBuildings.length,
+        id: feederId,
+        label: feederState?.label || feederId.replaceAll("_", " "),
+        status: feederState?.status || "nominal",
+      },
+    };
+  });
+
+  const lines: Feature<LineString>[] = [];
+  (topologyRuntime?.line_states || []).forEach((lineState, index) => {
+    const feederCoordinate = feederHeadCoordinates.get(lineState.feeder_id) || center;
+    const fromCoordinate =
+      lineState.is_feeder_head
+        ? center
+        : busCoordinates.get(lineState.from_bus) || feederCoordinate;
+    const toCoordinate =
+      lineState.to_bus === "substation_bus"
+        ? center
+        : busCoordinates.get(lineState.to_bus) || feederCoordinate;
+
+    if (
+      Math.abs(fromCoordinate[0] - toCoordinate[0]) < 0.000001 &&
+      Math.abs(fromCoordinate[1] - toCoordinate[1]) < 0.000001
+    ) {
+      return;
+    }
+
+    lines.push({
+      type: "Feature",
+      geometry: {
+        type: "LineString",
+        coordinates: [fromCoordinate, toCoordinate],
+      },
+      properties: {
+        id: lineState.line_id || `line-${index + 1}`,
+        label: lineState.line_id || `line-${index + 1}`,
+        status: lineState.status || "nominal",
+        loadingPct: typeof lineState.loading_pct === "number" ? lineState.loading_pct : 0,
+        lineWidth: Math.max(2.2, 2.2 + ((lineState.loading_pct || 0) * 3.8)),
+        color: statusColor(lineState.status || "nominal"),
+        isOutaged: Boolean(lineState.is_outaged),
       },
     });
-
-    if (entityRole === "feeder_coordinator") {
-      feeders.push({
-        type: "Feature",
-        geometry: {
-          type: "LineString",
-          coordinates: [center, centroid],
-        },
-        properties: {
-          id: entityId,
-          label: entityLabel,
-          role: entityRole,
-        },
-      });
-    }
   });
 
   return {
@@ -205,18 +255,22 @@ function buildTwinFeatures(
       type: "FeatureCollection",
       features: assets,
     },
-    feeders: {
+    feederHeads: {
       type: "FeatureCollection",
-      features: feeders,
+      features: feederHeads,
     },
-    centroids: {
+    lines: {
       type: "FeatureCollection",
-      features: centroids,
+      features: lines,
     },
   };
 }
 
-function setGeoJsonData(map: MapLibreMap, sourceId: string, data: FeatureCollection<Point> | FeatureCollection<LineString>) {
+function setGeoJsonData(
+  map: MapLibreMap,
+  sourceId: string,
+  data: FeatureCollection<Point> | FeatureCollection<LineString>,
+) {
   const source = map.getSource(sourceId) as GeoJSONSource | undefined;
   if (source) {
     source.setData(data);
@@ -227,6 +281,7 @@ interface TwinMapCanvasProps {
   geoContext?: GeoContext;
   buildings: BuildingState[];
   controlEntities: ControlEntity[];
+  topologyRuntime?: TopologyRuntime;
   twinSummary?: TwinSummary;
 }
 
@@ -234,6 +289,7 @@ export default function TwinMapCanvas({
   geoContext,
   buildings,
   controlEntities,
+  topologyRuntime,
   twinSummary,
 }: TwinMapCanvasProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -242,9 +298,11 @@ export default function TwinMapCanvas({
 
   const center = useMemo(() => normalizeCenter(geoContext), [geoContext]);
   const twinFeatures = useMemo(
-    () => buildTwinFeatures(center, buildings, controlEntities),
-    [center, buildings, controlEntities],
+    () => buildTwinFeatures(center, buildings, controlEntities, topologyRuntime),
+    [center, buildings, controlEntities, topologyRuntime],
   );
+  const activeEvents = topologyRuntime?.active_events || [];
+  const feederStressCount = topologyRuntime?.constrained_feeders || 0;
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) {
@@ -271,44 +329,55 @@ export default function TwinMapCanvas({
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
     map.on("load", () => {
-      map.addSource("twin-center", {
-        type: "geojson",
-        data: twinFeatures.center,
-      });
-      map.addSource("twin-assets", {
-        type: "geojson",
-        data: twinFeatures.assets,
-      });
-      map.addSource("twin-feeders", {
-        type: "geojson",
-        data: twinFeatures.feeders,
-      });
-      map.addSource("twin-centroids", {
-        type: "geojson",
-        data: twinFeatures.centroids,
-      });
+      map.addSource("twin-center", { type: "geojson", data: twinFeatures.center });
+      map.addSource("twin-assets", { type: "geojson", data: twinFeatures.assets });
+      map.addSource("twin-feeder-heads", { type: "geojson", data: twinFeatures.feederHeads });
+      map.addSource("twin-lines", { type: "geojson", data: twinFeatures.lines });
 
       map.addLayer({
-        id: "twin-feeders-line",
+        id: "twin-lines-main",
         type: "line",
-        source: "twin-feeders",
+        source: "twin-lines",
+        layout: {
+          "line-cap": "round",
+          "line-join": "round",
+        },
         paint: {
-          "line-color": "#06b6d4",
-          "line-width": 2.5,
-          "line-opacity": 0.78,
-          "line-blur": 0.2,
+          "line-color": ["get", "color"],
+          "line-width": ["get", "lineWidth"],
+          "line-opacity": 0.92,
         },
       });
 
       map.addLayer({
-        id: "twin-centroids-glow",
-        type: "circle",
-        source: "twin-centroids",
+        id: "twin-lines-outage",
+        type: "line",
+        source: "twin-lines",
+        filter: ["==", ["get", "isOutaged"], true],
         paint: {
-          "circle-radius": 12,
-          "circle-color": "rgba(6, 182, 212, 0.18)",
-          "circle-stroke-width": 1,
-          "circle-stroke-color": "rgba(6, 182, 212, 0.45)",
+          "line-color": "#ef4444",
+          "line-width": 5.4,
+          "line-opacity": 0.42,
+        },
+      });
+
+      map.addLayer({
+        id: "twin-feeder-heads",
+        type: "circle",
+        source: "twin-feeder-heads",
+        paint: {
+          "circle-radius": 8,
+          "circle-color": [
+            "match",
+            ["get", "status"],
+            "outage", "#ef4444",
+            "overload", "#fb7185",
+            "critical", "#f59e0b",
+            "warning", "#fde047",
+            "#06b6d4",
+          ],
+          "circle-stroke-width": 1.3,
+          "circle-stroke-color": "rgba(255,255,255,0.9)",
         },
       });
 
@@ -344,24 +413,6 @@ export default function TwinMapCanvas({
           "circle-opacity": 0.95,
         },
       });
-
-      map.addLayer({
-        id: "twin-assets-labels",
-        type: "symbol",
-        source: "twin-assets",
-        layout: {
-          "text-field": ["get", "label"],
-          "text-size": 11,
-          "text-font": ["Open Sans Regular"],
-          "text-offset": [0, 1.35],
-          "text-anchor": "top",
-        },
-        paint: {
-          "text-color": "#e2e8f0",
-          "text-halo-color": "rgba(2, 6, 23, 0.95)",
-          "text-halo-width": 1,
-        },
-      });
     });
 
     mapRef.current = map;
@@ -381,8 +432,8 @@ export default function TwinMapCanvas({
 
     setGeoJsonData(map, "twin-center", twinFeatures.center);
     setGeoJsonData(map, "twin-assets", twinFeatures.assets);
-    setGeoJsonData(map, "twin-feeders", twinFeatures.feeders);
-    setGeoJsonData(map, "twin-centroids", twinFeatures.centroids);
+    setGeoJsonData(map, "twin-feeder-heads", twinFeatures.feederHeads);
+    setGeoJsonData(map, "twin-lines", twinFeatures.lines);
 
     const previousCenter = previousCenterRef.current;
     if (
@@ -414,32 +465,34 @@ export default function TwinMapCanvas({
       </div>
 
       <div className="map-floating-card map-floating-top-right">
-        <div className="map-eyebrow">Map Stack</div>
+        <div className="map-eyebrow">Grid Stress</div>
         <div className="map-copy">
-          {MAP_STYLE_URL ? "Custom MapLibre Style" : "Open fallback style"}
+          {feederStressCount} constrained feeders · {topologyRuntime?.overloaded_lines || 0} overloaded lines
         </div>
         <div className="map-stack-meta">
-          {PMTILES_URL ? "PMTiles wired" : "PMTiles ready"}
+          {activeEvents.length
+            ? activeEvents[0].label
+            : `${MAP_STYLE_URL ? "Custom MapLibre Style" : "Open fallback style"} · ${PMTILES_URL ? "PMTiles wired" : "PMTiles ready"}`}
         </div>
       </div>
 
       <div className="map-floating-card map-floating-bottom-left">
         <div className="map-eyebrow">Legend</div>
         <div className="map-legend-row">
-          <span className="map-dot" style={{ background: "#3b82f6" }} />
-          Residential
-        </div>
-        <div className="map-legend-row">
-          <span className="map-dot" style={{ background: "#10b981" }} />
-          Commercial
-        </div>
-        <div className="map-legend-row">
-          <span className="map-dot" style={{ background: "#8b5cf6" }} />
-          EV fleet
-        </div>
-        <div className="map-legend-row">
           <span className="map-dot" style={{ background: "#06b6d4" }} />
-          Feeder spine
+          Nominal feeder
+        </div>
+        <div className="map-legend-row">
+          <span className="map-dot" style={{ background: "#fde047" }} />
+          Warning / constrained
+        </div>
+        <div className="map-legend-row">
+          <span className="map-dot" style={{ background: "#f59e0b" }} />
+          Critical loading
+        </div>
+        <div className="map-legend-row">
+          <span className="map-dot" style={{ background: "#ef4444" }} />
+          Outage / faulted line
         </div>
       </div>
     </div>

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 
 export interface BuildingState {
   id: string;
+  bus_id?: string;
   type: string;
   is_ev_away: boolean;
   net_electricity_consumption: number;
@@ -36,6 +37,54 @@ export interface TopologySummary {
   n_assets_attached?: number;
   max_line_capacity_kw?: number;
   radial?: boolean;
+}
+
+export interface TopologyEvent {
+  id: string;
+  kind: string;
+  severity: string;
+  label: string;
+  target: string;
+  summary: string;
+  steps_left?: number;
+}
+
+export interface TopologyLineState {
+  line_id: string;
+  feeder_id: string;
+  from_bus: string;
+  to_bus: string;
+  capacity_kw?: number;
+  available_capacity_kw?: number;
+  flow_kw?: number;
+  loading_pct?: number;
+  status: string;
+  is_outaged?: boolean;
+  is_feeder_head?: boolean;
+}
+
+export interface FeederState {
+  feeder_id: string;
+  label: string;
+  n_assets?: number;
+  net_load_kw?: number;
+  loading_kw?: number;
+  loading_pct?: number;
+  headroom_kw?: number | null;
+  capacity_kw?: number | null;
+  status: string;
+  line_count?: number;
+  constrained_lines?: number;
+  is_outaged?: boolean;
+}
+
+export interface TopologyRuntime {
+  system_stress_index?: number;
+  constrained_feeders?: number;
+  overloaded_lines?: number;
+  feeder_states?: FeederState[];
+  line_states?: TopologyLineState[];
+  active_events?: TopologyEvent[];
 }
 
 export interface ControlEntity {
@@ -160,6 +209,7 @@ export interface SimulationPayload {
   solar_capacity_factor?: number;
   weather_outlook?: string;
   topology_summary?: TopologySummary;
+  topology_runtime?: TopologyRuntime;
   geo_context?: GeoContext;
   twin_summary?: TwinSummary;
   atlas_context?: AtlasContext;

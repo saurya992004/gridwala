@@ -339,6 +339,7 @@ async def ws_simulate(
             "grid_wholesale_price": grid_signal_spine.get("day_ahead_price"),
             "grid_wholesale_price_unit": grid_signal_spine.get("day_ahead_price_unit"),
             "topology_summary": runner.topology_summary,
+            "topology_runtime": runner.env.topology_runtime,
             "geo_context": runner.env.geo_context,
             "twin_summary": runner.env.twin_summary,
             "atlas_context": runner.env.atlas_context,

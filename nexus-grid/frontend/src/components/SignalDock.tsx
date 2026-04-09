@@ -50,6 +50,8 @@ function dockTile(
 }
 
 export default function SignalDock({ payload }: { payload: SimulationPayload | null }) {
+  const activeTopologyEvent = payload?.topology_runtime?.active_events?.[0];
+
   return (
     <div className="signal-dock">
       {dockTile(
@@ -87,7 +89,9 @@ export default function SignalDock({ payload }: { payload: SimulationPayload | n
         "Twin",
         "Topology",
         `${payload?.topology_summary?.n_feeders || 0} feeders`,
-        `${payload?.topology_summary?.n_buses || 0} buses · ${payload?.topology_summary?.n_lines || 0} lines`,
+        typeof payload?.topology_runtime?.constrained_feeders === "number" && payload.topology_runtime.constrained_feeders > 0
+          ? `${payload.topology_runtime.constrained_feeders} constrained · ${payload.topology_runtime.overloaded_lines || 0} overloaded`
+          : `${payload?.topology_summary?.n_buses || 0} buses · ${payload?.topology_summary?.n_lines || 0} lines`,
         <Radar size={16} color="var(--neon-purple)" />,
       )}
       {dockTile(
@@ -103,9 +107,11 @@ export default function SignalDock({ payload }: { payload: SimulationPayload | n
         "Solar",
         "Forecast",
         metricValue(payload?.solar_capacity_factor, 2, "factor"),
-        payload?.grid_interchange_state
-          ? `${payload.grid_interchange_state.replaceAll("_", " ")}`
-          : payload?.weather_outlook || "weather outlook pending",
+        activeTopologyEvent
+          ? activeTopologyEvent.label
+          : payload?.grid_interchange_state
+            ? payload.grid_interchange_state.replaceAll("_", " ")
+            : payload?.weather_outlook || "weather outlook pending",
         <Zap size={16} color="var(--neon-amber)" />,
       )}
     </div>
