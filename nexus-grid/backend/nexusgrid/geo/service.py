@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 from urllib.error import HTTPError, URLError
@@ -13,7 +14,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from nexusgrid.core.schema_loader import MAX_BUILDINGS, load_from_dict
-from nexusgrid.geo.catalog import search_catalog
+from nexusgrid.geo.catalog import featured_catalog_locations, search_catalog
 from nexusgrid.geo.enrichment import geo_enrichment_service
 
 
@@ -194,7 +195,7 @@ class NominatimLocationProvider:
 class GeoTwinBuilder:
     """Generate a validated atlas-seed schema from a resolved world location."""
 
-    generator_version = "atlas-seed-v0.1"
+    generator_version = "atlas-seed-v0.2"
 
     def build(
         self,
@@ -266,7 +267,12 @@ class GeoTwinBuilder:
             },
             "buildings": buildings,
         }
-        return load_from_dict(schema)
+        validated = load_from_dict(schema)
+        return self._attach_phase_2b_metadata(
+            schema=validated,
+            location=location,
+            district_type=resolved_type,
+        )
 
     def _resolve_district_type(self, location: LocationCandidate, district_type: str) -> str:
         if district_type and district_type != "auto":
@@ -337,6 +343,234 @@ class GeoTwinBuilder:
             suffix = str(idx + 1)
         return f"{label} {suffix}"
 
+    def _attach_phase_2b_metadata(
+        self,
+        schema: Dict[str, Any],
+        location: LocationCandidate,
+        district_type: str,
+    ) -> Dict[str, Any]:
+        enriched = dict(schema)
+        control_entities = self._build_control_entities(enriched)
+        dominant_type = self._dominant_asset_type(enriched.get("buildings", []))
+        total_storage = round(
+            sum(float(building.get("battery_kwh", 0.0)) for building in enriched.get("buildings", [])),
+            1,
+        )
+        total_solar = round(
+            sum(float(building.get("solar_peak_kw", 0.0)) for building in enriched.get("buildings", [])),
+            1,
+        )
+        total_dispatch = round(
+            sum(float(building.get("battery_max_rate_kw", 0.0)) for building in enriched.get("buildings", [])),
+            1,
+        )
+
+        enriched["atlas_context"] = {
+            "phase": "2B",
+            "mode": "city_to_twin",
+            "generator": self.generator_version,
+            "selection_kind": "city_seed"
+            if location.type.lower() in {"city", "city-state"}
+            else "location_seed",
+            "district_type": district_type,
+            "agentization_strategy": "feeder_and_asset_clustering",
+            "control_surface": "generated_control_entities",
+            "feature_flags": [
+                "featured_city_launcher",
+                "generated_control_entities",
+                "topology_seed",
+                "provenance_panel",
+            ],
+        }
+        enriched["control_entities"] = control_entities
+        enriched["twin_summary"] = {
+            "phase": "2B",
+            "location_label": location.display_name,
+            "country_code": location.country_code.lower(),
+            "district_type": district_type,
+            "n_buildings": len(enriched.get("buildings", [])),
+            "n_control_entities": len(control_entities),
+            "n_feeders": int(enriched.get("topology_summary", {}).get("n_feeders", 0)),
+            "dominant_asset_type": dominant_type,
+            "solar_capacity_kw": total_solar,
+            "storage_capacity_kwh": total_storage,
+            "dispatch_capacity_kw": total_dispatch,
+            "rl_agent_scope": sorted({entity["agent_class"] for entity in control_entities}),
+        }
+        enriched["twin_provenance"] = {
+            "geography": {
+                "source": location.source,
+                "label": location.display_name,
+                "coordinates": {
+                    "latitude": round(location.latitude, 6),
+                    "longitude": round(location.longitude, 6),
+                },
+            },
+            "live_signal_spine": {
+                "carbon": "pending_enrichment",
+                "weather": "pending_enrichment",
+                "tariff": "pending_enrichment",
+            },
+            "inferred_layers": [
+                {
+                    "layer": "building_archetypes",
+                    "source": "atlas-template-inference",
+                    "confidence": 0.73,
+                },
+                {
+                    "layer": "grid_topology",
+                    "source": "phase-2a-radial-topology-generator",
+                    "confidence": 0.78,
+                },
+                {
+                    "layer": "control_entities",
+                    "source": "feeder-and-asset-clustering",
+                    "confidence": 0.76,
+                },
+            ],
+            "editable_assumptions": [
+                "district_type",
+                "building_archetype_mix",
+                "control_entity_clustering",
+                "topology_seed",
+            ],
+        }
+        return enriched
+
+    def _build_control_entities(self, schema: Dict[str, Any]) -> List[Dict[str, Any]]:
+        buildings = [dict(building) for building in schema.get("buildings", [])]
+        topology = schema.get("grid_topology", {})
+        feeders = topology.get("feeders", [])
+        if not buildings:
+            return []
+
+        bus_to_feeder: Dict[str, str] = {}
+        for feeder in feeders:
+            feeder_id = str(feeder.get("id", "primary_feeder"))
+            for bus_id in feeder.get("bus_ids", []):
+                bus_to_feeder[str(bus_id)] = feeder_id
+
+        feeder_groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        for building in buildings:
+            feeder_id = bus_to_feeder.get(str(building.get("bus_id", "")), "unassigned_feeder")
+            feeder_groups[feeder_id].append(building)
+
+        control_entities: List[Dict[str, Any]] = []
+        for feeder_id, feeder_buildings in feeder_groups.items():
+            control_entities.append(
+                self._build_feeder_coordinator(feeder_id, feeder_buildings)
+            )
+            type_groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+            for building in feeder_buildings:
+                type_groups[str(building.get("type", "residential")).lower()].append(building)
+
+            for asset_type, grouped_buildings in type_groups.items():
+                control_entities.append(
+                    self._build_asset_cluster_entity(feeder_id, asset_type, grouped_buildings)
+                )
+
+        return control_entities
+
+    def _build_feeder_coordinator(
+        self,
+        feeder_id: str,
+        buildings: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        return {
+            "id": f"{feeder_id}_coordinator",
+            "label": self._humanize_identifier(feeder_id),
+            "role": "feeder_coordinator",
+            "agent_class": "feeder_dispatch_agent",
+            "feeder_id": feeder_id,
+            "member_buildings": [str(building.get("name")) for building in buildings],
+            "member_types": sorted(
+                {str(building.get("type", "residential")).lower() for building in buildings}
+            ),
+            "solar_capacity_kw": round(
+                sum(float(building.get("solar_peak_kw", 0.0)) for building in buildings),
+                1,
+            ),
+            "storage_capacity_kwh": round(
+                sum(float(building.get("battery_kwh", 0.0)) for building in buildings),
+                1,
+            ),
+            "dispatch_capacity_kw": round(
+                sum(float(building.get("battery_max_rate_kw", 0.0)) for building in buildings),
+                1,
+            ),
+            "objective": "Protect feeder headroom while coordinating imports, exports, and flexible demand.",
+        }
+
+    def _build_asset_cluster_entity(
+        self,
+        feeder_id: str,
+        asset_type: str,
+        buildings: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        role, agent_class, objective = self._cluster_profile(asset_type)
+        return {
+            "id": f"{feeder_id}_{asset_type}_cluster",
+            "label": f"{self._humanize_identifier(asset_type)} Cluster",
+            "role": role,
+            "agent_class": agent_class,
+            "feeder_id": feeder_id,
+            "member_buildings": [str(building.get("name")) for building in buildings],
+            "member_types": [asset_type],
+            "solar_capacity_kw": round(
+                sum(float(building.get("solar_peak_kw", 0.0)) for building in buildings),
+                1,
+            ),
+            "storage_capacity_kwh": round(
+                sum(float(building.get("battery_kwh", 0.0)) for building in buildings),
+                1,
+            ),
+            "dispatch_capacity_kw": round(
+                sum(float(building.get("battery_max_rate_kw", 0.0)) for building in buildings),
+                1,
+            ),
+            "objective": objective,
+        }
+
+    def _cluster_profile(self, asset_type: str) -> Tuple[str, str, str]:
+        if asset_type == "ev":
+            return (
+                "mobility_fleet",
+                "ev_fleet_agent",
+                "Shift charging demand, capture off-peak energy, and provide rapid flexible response.",
+            )
+        if asset_type == "industrial":
+            return (
+                "industrial_flex_cluster",
+                "industrial_load_agent",
+                "Protect process continuity while reshaping flexible industrial demand around grid stress.",
+            )
+        if asset_type in {"hospital", "campus"}:
+            return (
+                "critical_service_cluster",
+                "critical_infrastructure_agent",
+                "Preserve service reliability first, then optimize cost and carbon around protected loads.",
+            )
+        if asset_type == "commercial":
+            return (
+                "commercial_flex_cluster",
+                "commercial_demand_agent",
+                "Shift discretionary demand and storage dispatch around tariff and carbon windows.",
+            )
+        return (
+            "residential_flex_cluster",
+            "residential_storage_agent",
+            "Coordinate storage-rich prosumers for peak shaving, self-consumption, and carbon-aware exports.",
+        )
+
+    def _dominant_asset_type(self, buildings: List[Dict[str, Any]]) -> str:
+        counts = Counter(str(building.get("type", "residential")).lower() for building in buildings)
+        if not counts:
+            return "unknown"
+        return counts.most_common(1)[0][0]
+
+    def _humanize_identifier(self, value: str) -> str:
+        return value.replace("_", " ").title()
+
 
 class GeoService:
     """Provider orchestration and geo-to-schema service facade."""
@@ -384,6 +618,32 @@ class GeoService:
 
     def list_enrichment_providers(self) -> Dict[str, List[Dict[str, Any]]]:
         return geo_enrichment_service.list_providers()
+
+    def list_featured_locations(self, limit: int = 8) -> List[Dict[str, Any]]:
+        featured: List[Dict[str, Any]] = []
+        for item in featured_catalog_locations(limit=limit):
+            candidate = LocationCandidate(
+                display_name=str(item.get("display_name", "Unknown location")),
+                latitude=float(item.get("latitude", 0.0)),
+                longitude=float(item.get("longitude", 0.0)),
+                country=str(item.get("country", "Unknown")),
+                country_code=str(item.get("country_code", "custom")),
+                state=str(item.get("state", "Unknown")),
+                city=str(item.get("city", "Unknown")),
+                locality=str(item.get("locality", item.get("city", "Unknown"))),
+                category=str(item.get("category", "place")),
+                type=str(item.get("type", "place")),
+                importance=float(item.get("importance", 0.0)),
+                source="catalog",
+            )
+            featured.append(
+                {
+                    "query": candidate.locality,
+                    "location": candidate.to_dict(),
+                    "recommended_district_type": self.builder._resolve_district_type(candidate, "auto"),
+                }
+            )
+        return featured
 
     def resolve(self, query: str, provider: str = "auto", limit: int = 5) -> Dict[str, Any]:
         normalized_query = query.strip()
@@ -466,6 +726,7 @@ class GeoService:
                 tariff_provider=tariff_provider,
             )
             schema = geo_enrichment_service.attach_to_schema(schema=schema, enrichment=enrichment)
+            schema = self._refresh_phase_2b_metadata(schema=schema, enrichment=enrichment)
             warnings.extend(enrichment["warnings"])
 
         return {
@@ -475,6 +736,10 @@ class GeoService:
             "schema": schema,
             "enrichment": enrichment,
             "warnings": warnings,
+            "twin_summary": schema.get("twin_summary"),
+            "control_entities": schema.get("control_entities", []),
+            "atlas_context": schema.get("atlas_context", {}),
+            "twin_provenance": schema.get("twin_provenance", {}),
         }
 
     def enrich_existing_schema(
@@ -501,6 +766,7 @@ class GeoService:
             tariff_provider=tariff_provider,
         )
         enriched_schema = geo_enrichment_service.attach_to_schema(schema=schema, enrichment=enrichment)
+        enriched_schema = self._refresh_phase_2b_metadata(schema=enriched_schema, enrichment=enrichment)
 
         return {
             "query": query,
@@ -509,6 +775,10 @@ class GeoService:
             "schema": enriched_schema,
             "enrichment": enrichment,
             "warnings": [*resolution["warnings"], *enrichment["warnings"]],
+            "twin_summary": enriched_schema.get("twin_summary"),
+            "control_entities": enriched_schema.get("control_entities", []),
+            "atlas_context": enriched_schema.get("atlas_context", {}),
+            "twin_provenance": enriched_schema.get("twin_provenance", {}),
         }
 
     def enrich_location(
@@ -542,6 +812,33 @@ class GeoService:
             "enrichment": enrichment,
             "warnings": [*resolution["warnings"], *enrichment["warnings"]],
         }
+
+    def _refresh_phase_2b_metadata(
+        self,
+        schema: Dict[str, Any],
+        enrichment: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        updated = dict(schema)
+        twin_summary = dict(updated.get("twin_summary", {}))
+        twin_provenance = dict(updated.get("twin_provenance", {}))
+        live_signal_spine = dict(twin_provenance.get("live_signal_spine", {}))
+
+        live_signal_spine.update(
+            {
+                "weather": enrichment["weather"]["provider"],
+                "carbon": enrichment["carbon"]["provider"],
+                "tariff": enrichment["tariff"]["provider"],
+            }
+        )
+        twin_provenance["live_signal_spine"] = live_signal_spine
+
+        electricity_maps_zone = enrichment.get("carbon", {}).get("zone")
+        if electricity_maps_zone:
+            twin_summary["electricity_maps_zone"] = electricity_maps_zone
+
+        updated["twin_summary"] = twin_summary
+        updated["twin_provenance"] = twin_provenance
+        return updated
 
     def _provider_order(self, provider: str) -> List[str]:
         if provider == "auto":

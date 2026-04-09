@@ -207,14 +207,24 @@ def get_geo_providers():
     return {
         **_engine_descriptor(),
         "providers": geo_service.list_providers(),
+        "featured_locations": geo_service.list_featured_locations(),
         "enrichment_providers": geo_service.list_enrichment_providers(),
         "district_types": ["auto", *DISTRICT_LABELS.keys()],
-        "phase": "1B",
+        "phase": "2B",
         "recommended_live_apis": [
             "Electricity Maps for live carbon intensity",
             "Open-Meteo or NASA POWER for weather and solar context",
             "OpenEI or utility-specific tariff feeds for price signals",
         ],
+    }
+
+
+@app.get("/api/geo/featured", tags=["Geo"])
+def get_featured_geo_locations(limit: int = Query(default=8, ge=1, le=12)):
+    return {
+        **_engine_descriptor(),
+        "phase": "2B",
+        "featured_locations": geo_service.list_featured_locations(limit=limit),
     }
 
 
@@ -226,7 +236,7 @@ def resolve_geo_location(payload: GeoResolvePayload):
             provider=payload.provider,
             limit=payload.limit,
         )
-        result["phase"] = "1B"
+        result["phase"] = "2B"
         return result
     except (GeoResolutionError, GeoEnrichmentError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -242,7 +252,7 @@ def enrich_geo_location(payload: GeoEnrichmentPayload):
             carbon_provider=payload.carbon_provider,
             tariff_provider=payload.tariff_provider,
         )
-        result["phase"] = "1B"
+        result["phase"] = "2B"
         return result
     except (GeoResolutionError, GeoEnrichmentError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -261,7 +271,7 @@ def generate_geo_schema(payload: GeoSchemaPayload):
             carbon_provider=payload.carbon_provider,
             tariff_provider=payload.tariff_provider,
         )
-        result["phase"] = "1B"
+        result["phase"] = "2B"
         result["building_count"] = len(result["schema"]["buildings"])
         return result
     except (GeoResolutionError, GeoEnrichmentError) as exc:
@@ -306,7 +316,7 @@ async def ws_simulate(
         {
             "type": "connected",
             "district_name": runner.env._district_name,
-            "buildings": runner.env.building_names,
+            "buildings": runner.env.seed_buildings,
             "max_steps": runner.env.max_steps,
             "preset": active_preset or "default",
             "controller_mode": runner.controller_mode,
@@ -317,6 +327,13 @@ async def ws_simulate(
             "operating_context_mode": runner.operating_context_mode,
             "operating_context_live": runner.operating_context_live,
             "topology_summary": runner.topology_summary,
+            "geo_context": runner.env.geo_context,
+            "twin_summary": runner.env.twin_summary,
+            "atlas_context": runner.env.atlas_context,
+            "control_entities": runner.env.control_entities,
+            "twin_provenance": runner.env.twin_provenance,
+            "data_sources": runner.env.data_sources,
+            "enrichment_warnings": runner.env.enrichment_warnings,
         }
     )
 

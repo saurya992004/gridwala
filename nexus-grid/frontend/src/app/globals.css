@@ -283,6 +283,46 @@ h1, h2, h3, h4, h5, h6 {
   color: white;
 }
 
+.control-input,
+.control-select {
+  min-height: 46px;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: white;
+  font-family: var(--font-sans);
+}
+
+.control-select {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.chip-button {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: white;
+  border-radius: 999px;
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+}
+
+.chip-button:hover {
+  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.08);
+}
+
 @media (max-width: 1200px) {
   body {
     overflow: auto;
@@ -310,5 +350,10 @@ h1, h2, h3, h4, h5, h6 {
 
   .brand-text {
     font-size: 1.35rem;
+  }
+
+  .control-input,
+  .control-select {
+    min-height: 44px;
   }
 }

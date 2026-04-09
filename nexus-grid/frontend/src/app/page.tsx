@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, Variants } from "framer-motion";
 import {
   Activity,
@@ -11,16 +11,45 @@ import {
   Map as MapIcon,
   Pause,
   Play,
+  Radar,
   Zap,
 } from "lucide-react";
 import AssetRoster from "@/components/AssetRoster";
+import CityTwinLaunchPanel from "@/components/CityTwinLaunchPanel";
+import ControlEntitiesPanel from "@/components/ControlEntitiesPanel";
 import DistrictMap from "@/components/DistrictMap";
 import LedgerTable from "@/components/LedgerTable";
 import OperatorDecisionPanel from "@/components/OperatorDecisionPanel";
 import OperationsSummary from "@/components/OperationsSummary";
 import TelemetryCharts from "@/components/TelemetryCharts";
-import { useSimulationWebSocket } from "@/hooks/useSimulationWebSocket";
+import TwinProvenancePanel from "@/components/TwinProvenancePanel";
+import {
+  GeoFeaturedLocation,
+  useSimulationWebSocket,
+} from "@/hooks/useSimulationWebSocket";
 
+const FALLBACK_FEATURED_LOCATIONS: GeoFeaturedLocation[] = [
+  {
+    query: "London",
+    location: { display_name: "London, England, United Kingdom", city: "London", country: "United Kingdom" },
+    recommended_district_type: "mixed_use",
+  },
+  {
+    query: "Boston",
+    location: { display_name: "Boston, Massachusetts, United States", city: "Boston", country: "United States" },
+    recommended_district_type: "campus",
+  },
+  {
+    query: "Mumbai",
+    location: { display_name: "Mumbai, Maharashtra, India", city: "Mumbai", country: "India" },
+    recommended_district_type: "industrial",
+  },
+  {
+    query: "Singapore",
+    location: { display_name: "Singapore", city: "Singapore", country: "Singapore" },
+    recommended_district_type: "mixed_use",
+  },
+];
 
 export default function Home() {
   const {
@@ -28,11 +57,43 @@ export default function Home() {
     history,
     isConnected,
     isPaused,
+    isTwinLoading,
+    twinError,
     togglePause,
     triggerEmergency,
     triggerForecast,
+    loadCityTwin,
   } = useSimulationWebSocket();
-  const [activeTab, setActiveTab] = useState<"city" | "economy">("city");
+  const [activeTab, setActiveTab] = useState<"city" | "control" | "economy">("city");
+  const [featuredLocations, setFeaturedLocations] = useState<GeoFeaturedLocation[]>(
+    FALLBACK_FEATURED_LOCATIONS,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchFeaturedLocations = async () => {
+      try {
+        const response = await fetch("http://127.0.0.1:8000/api/geo/featured?limit=6");
+        if (!response.ok) return;
+
+        const payload = (await response.json()) as {
+          featured_locations?: GeoFeaturedLocation[];
+        };
+
+        if (!cancelled && Array.isArray(payload.featured_locations) && payload.featured_locations.length) {
+          setFeaturedLocations(payload.featured_locations);
+        }
+      } catch {
+        // Keep fallback catalog if the backend is not reachable during first paint.
+      }
+    };
+
+    fetchFeaturedLocations();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const containerVars = {
     hidden: { opacity: 0 },
@@ -50,6 +111,11 @@ export default function Home() {
       transition: { type: "spring", stiffness: 280, damping: 24 },
     },
   };
+
+  const currentLocationLabel =
+    data?.geo_context?.display_name || data?.district_name || "Adaptive Grid District";
+  const twinModeLabel =
+    data?.atlas_context?.mode === "city_to_twin" ? "CITY TWIN LIVE" : "SANDBOX DISTRICT";
 
   return (
     <>
@@ -74,8 +140,26 @@ export default function Home() {
           animate={{ opacity: 1, y: 0 }}
           style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}
         >
+          <div
+            className="status-badge"
+            style={{
+              color: data?.atlas_context?.mode === "city_to_twin" ? "var(--neon-purple)" : "var(--text-secondary)",
+              background:
+                data?.atlas_context?.mode === "city_to_twin"
+                  ? "rgba(139, 92, 246, 0.12)"
+                  : "rgba(148, 163, 184, 0.1)",
+              boxShadow: "none",
+            }}
+          >
+            <Radar size={12} />
+            {twinModeLabel}
+          </div>
+
           {data?.engine_mode && (
-            <div className="status-badge" style={{ color: "var(--neon-cyan)", background: "rgba(6, 182, 212, 0.1)", boxShadow: "none" }}>
+            <div
+              className="status-badge"
+              style={{ color: "var(--neon-cyan)", background: "rgba(6, 182, 212, 0.1)", boxShadow: "none" }}
+            >
               <Cpu size={12} />
               {data.engine_mode.toUpperCase()}
             </div>
@@ -162,11 +246,9 @@ export default function Home() {
                 <div style={{ color: "var(--text-muted)", fontSize: "0.76rem", letterSpacing: "0.14em", textTransform: "uppercase" }}>
                   Intelligent Control Room
                 </div>
-                <h1 style={{ fontSize: "1.5rem", marginTop: "6px" }}>
-                  {data?.district_name || "Adaptive Grid District"}
-                </h1>
+                <h1 style={{ fontSize: "1.5rem", marginTop: "6px" }}>{currentLocationLabel}</h1>
                 <div style={{ color: "var(--text-secondary)", marginTop: "8px", maxWidth: "720px", lineHeight: 1.5 }}>
-                  Clean operator layout for live weather, carbon, tariff, market, and fleet signals. The websocket stays lean; the dashboard does the interpretation.
+                  Mission control for city-to-digital-twin operations. Electricity Maps feeds the external reality; NEXUS GRID turns that location into feeders, asset clusters, and eventually RL-owned control surfaces.
                 </div>
               </div>
 
@@ -193,6 +275,16 @@ export default function Home() {
           </motion.div>
 
           <motion.div variants={itemVars}>
+            <CityTwinLaunchPanel
+              featuredLocations={featuredLocations}
+              currentLocationLabel={currentLocationLabel}
+              isLaunching={isTwinLoading}
+              error={twinError}
+              onLaunch={loadCityTwin}
+            />
+          </motion.div>
+
+          <motion.div variants={itemVars}>
             <OperationsSummary payload={data} />
           </motion.div>
 
@@ -213,19 +305,30 @@ export default function Home() {
             >
               <div>
                 <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", letterSpacing: "0.14em", textTransform: "uppercase" }}>
-                  District Twin
+                  Digital Twin Theater
                 </div>
                 <h3 style={{ fontSize: "1.1rem", marginTop: "4px" }}>
-                  {activeTab === "city" ? "Asset Theatre" : "Settlement Theatre"}
+                  {activeTab === "city"
+                    ? "Asset Theatre"
+                    : activeTab === "control"
+                      ? "Control Entity Theatre"
+                      : "Settlement Theatre"}
                 </h3>
               </div>
-              <div style={{ display: "flex", gap: "12px" }}>
+              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
                 <button
                   className={`btn ${activeTab === "city" ? "btn-primary" : "btn-outline"}`}
                   onClick={() => setActiveTab("city")}
                   style={{ padding: "8px 16px" }}
                 >
                   <MapIcon size={16} /> District Twin
+                </button>
+                <button
+                  className={`btn ${activeTab === "control" ? "btn-primary" : "btn-outline"}`}
+                  onClick={() => setActiveTab("control")}
+                  style={{ padding: "8px 16px" }}
+                >
+                  <Cpu size={16} /> Control Entities
                 </button>
                 <button
                   className={`btn ${activeTab === "economy" ? "btn-primary" : "btn-outline"}`}
@@ -251,6 +354,8 @@ export default function Home() {
             >
               {activeTab === "city" && data?.buildings ? (
                 <DistrictMap buildings={data.buildings} />
+              ) : activeTab === "control" ? (
+                <ControlEntitiesPanel controlEntities={data?.control_entities || []} />
               ) : activeTab === "economy" && data?.buildings ? (
                 <LedgerTable buildings={data.buildings} />
               ) : (
@@ -282,6 +387,16 @@ export default function Home() {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "24px", minHeight: 0 }}>
+          <motion.div variants={itemVars} style={{ minHeight: 0 }}>
+            <TwinProvenancePanel
+              geoContext={data?.geo_context}
+              twinSummary={data?.twin_summary}
+              topologySummary={data?.topology_summary}
+              twinProvenance={data?.twin_provenance}
+              dataSources={data?.data_sources}
+              warnings={data?.enrichment_warnings}
+            />
+          </motion.div>
           <motion.div variants={itemVars} style={{ minHeight: 0 }}>
             <OperatorDecisionPanel payload={data} />
           </motion.div>

@@ -166,6 +166,12 @@ CATALOG_LOCATIONS: List[Dict[str, object]] = [
 ]
 
 
+def featured_catalog_locations(limit: int = 8) -> List[Dict[str, object]]:
+    """Return a curated list of catalog locations for the atlas launcher."""
+    safe_limit = max(1, min(limit, len(CATALOG_LOCATIONS)))
+    return [dict(item) for item in CATALOG_LOCATIONS[:safe_limit]]
+
+
 def _normalize(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
 

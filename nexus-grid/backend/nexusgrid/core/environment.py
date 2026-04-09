@@ -216,6 +216,13 @@ class NexusGridEnv:
         self._carbon_profile = get_profile(cfg.get("carbon_profile", "uk_national_grid"))
         self._carbon_profile_average = float(mean(self._carbon_profile))
         self._topology_summary = dict(cfg.get("topology_summary", {}))
+        self._geo_context = dict(cfg.get("geo_context", {}))
+        self._twin_summary = dict(cfg.get("twin_summary", {}))
+        self._atlas_context = dict(cfg.get("atlas_context", {}))
+        self._twin_provenance = dict(cfg.get("twin_provenance", {}))
+        self._data_sources = dict(cfg.get("data_sources", {}))
+        self._enrichment_warnings = list(cfg.get("enrichment_warnings", []))
+        self._control_entities = [dict(entity) for entity in cfg.get("control_entities", [])]
         self._buildings = [Building(i, building_cfg) for i, building_cfg in enumerate(cfg["buildings"])]
         self._step_count = 0
         self._rng = np.random.default_rng(seed=42)
@@ -407,6 +414,7 @@ class NexusGridEnv:
             "hour": hour,
             "day": day,
             "done": self._step_count >= TOTAL_STEPS,
+            "district_name": self._district_name,
             "buildings": buildings_data,
             "carbon_intensity": carbon_intensity,
             "district_net_consumption": district_net,
@@ -428,6 +436,13 @@ class NexusGridEnv:
             "operating_context_mode": self._context_mode,
             "operating_context_live": self._context_live,
             "topology_summary": self._topology_summary,
+            "geo_context": self._geo_context,
+            "twin_summary": self._twin_summary,
+            "atlas_context": self._atlas_context,
+            "control_entities": self._control_entities,
+            "twin_provenance": self._twin_provenance,
+            "data_sources": self._data_sources,
+            "enrichment_warnings": self._enrichment_warnings,
         }
         self._last_payload = payload
         return payload
@@ -555,6 +570,25 @@ class NexusGridEnv:
         return [building.id for building in self._buildings]
 
     @property
+    def seed_buildings(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "id": building.id,
+                "type": building.type,
+                "is_ev_away": False,
+                "net_electricity_consumption": 0.0,
+                "solar_generation": 0.0,
+                "battery_soc": 0.5,
+                "reward": 0.0,
+                "p2p_traded_kwh": 0.0,
+                "grid_exchanged_kwh": 0.0,
+                "nexus_tokens_earned": 0.0,
+                "nexus_wallet": 0.0,
+            }
+            for building in self._buildings
+        ]
+
+    @property
     def n_buildings(self) -> int:
         return len(self._buildings)
 
@@ -589,6 +623,34 @@ class NexusGridEnv:
     @property
     def topology_summary(self) -> Dict[str, Any]:
         return self._topology_summary
+
+    @property
+    def geo_context(self) -> Dict[str, Any]:
+        return self._geo_context
+
+    @property
+    def twin_summary(self) -> Dict[str, Any]:
+        return self._twin_summary
+
+    @property
+    def atlas_context(self) -> Dict[str, Any]:
+        return self._atlas_context
+
+    @property
+    def control_entities(self) -> List[Dict[str, Any]]:
+        return self._control_entities
+
+    @property
+    def twin_provenance(self) -> Dict[str, Any]:
+        return self._twin_provenance
+
+    @property
+    def data_sources(self) -> Dict[str, Any]:
+        return self._data_sources
+
+    @property
+    def enrichment_warnings(self) -> List[str]:
+        return self._enrichment_warnings
 
 
 def _safe_int(value: Any, default: int) -> int:
