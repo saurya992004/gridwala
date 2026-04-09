@@ -65,6 +65,8 @@ export interface TwinSummary {
   storage_capacity_kwh?: number;
   dispatch_capacity_kw?: number;
   electricity_maps_zone?: string;
+  electricity_maps_provider_mode?: string;
+  renewable_share_pct?: number;
   rl_agent_scope?: string[];
 }
 
@@ -143,6 +145,17 @@ export interface SimulationPayload {
   grid_tariff_currency?: string;
   grid_tariff_window?: string;
   grid_tariff_band?: string;
+  electricity_maps_zone?: string;
+  electricity_maps_provider_mode?: string;
+  grid_signal_estimated?: boolean;
+  grid_renewable_share_pct?: number;
+  grid_total_load_mw?: number;
+  grid_import_mw?: number;
+  grid_export_mw?: number;
+  grid_net_interchange_mw?: number;
+  grid_interchange_state?: string;
+  grid_wholesale_price?: number;
+  grid_wholesale_price_unit?: string;
   ambient_temperature_c?: number;
   solar_capacity_factor?: number;
   weather_outlook?: string;

@@ -893,11 +893,23 @@ class GeoService:
         twin_summary = dict(updated.get("twin_summary", {}))
         twin_provenance = dict(updated.get("twin_provenance", {}))
         live_signal_spine = dict(twin_provenance.get("live_signal_spine", {}))
+        carbon_signal_spine = dict(enrichment.get("carbon", {}).get("signal_spine", {}))
+
+        carbon_label = enrichment["carbon"]["provider"]
+        if carbon_label == "electricity_maps":
+            zone = carbon_signal_spine.get("zone")
+            provider_mode = carbon_signal_spine.get("provider_mode")
+            label_parts = ["electricity_maps"]
+            if zone:
+                label_parts.append(str(zone))
+            if provider_mode == "sandbox":
+                label_parts.append("sandbox")
+            carbon_label = " · ".join(label_parts)
 
         live_signal_spine.update(
             {
                 "weather": enrichment["weather"]["provider"],
-                "carbon": enrichment["carbon"]["provider"],
+                "carbon": carbon_label,
                 "tariff": enrichment["tariff"]["provider"],
             }
         )
@@ -906,6 +918,14 @@ class GeoService:
         electricity_maps_zone = enrichment.get("carbon", {}).get("zone")
         if electricity_maps_zone:
             twin_summary["electricity_maps_zone"] = electricity_maps_zone
+        if carbon_signal_spine.get("provider_mode"):
+            twin_summary["electricity_maps_provider_mode"] = carbon_signal_spine.get(
+                "provider_mode"
+            )
+        if carbon_signal_spine.get("renewable_share_pct") is not None:
+            twin_summary["renewable_share_pct"] = carbon_signal_spine.get(
+                "renewable_share_pct"
+            )
 
         updated["twin_summary"] = twin_summary
         updated["twin_provenance"] = twin_provenance

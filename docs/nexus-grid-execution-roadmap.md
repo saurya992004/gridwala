@@ -2,312 +2,198 @@
 
 ## Restart Handoff
 
-If you restart Codex later, the shortest accurate resume prompt is:
+If you restart Codex later, use this exact prompt:
 
-`Continue NEXUS GRID from Phase 2B using the roadmap and current repo state. Electricity Maps is the live signal spine, not the full twin. Keep building the city-to-digital-twin RL platform.`
+`Continue NEXUS GRID from the current Phase 2B handoff using docs/nexus-grid-execution-roadmap.md and the current repo state. Electricity Maps is now the live v4 signal spine, not the twin itself. Preserve existing uncommitted work, inspect git status first, then continue toward Phase 2C with a sparse map-first control room.`
 
-## Current Build Status
+## Current Truth
+
+NEXUS GRID is no longer just a manual sandbox district demo.
+
+It now has:
+
+- a stabilized sandbox engine and honest controller fallback
+- geo resolution and city-to-schema generation
+- live weather, tariff, and carbon enrichment
+- a map-first control-room frontend
+- topology-aware feeder and control-entity generation
+- a city-to-twin launcher workflow
+- Electricity Maps upgraded from a basic carbon lookup into a live `v4` signal spine
+
+Core product stance:
+
+- **Electricity Maps is the regional live signal spine**
+- **NEXUS GRID generates the control-ready digital twin**
+- **RL and hybrid control act on inferred feeders, clusters, and flexible assets**
+
+## Current Phase Status
 
 Completed:
 
-- **Phase 0:** stabilization, model registry, honest controller fallback, sandbox engine labeling
+- **Phase 0:** stabilization, model registry, honest DQN fallback, sandbox engine labeling
 - **Phase 1A:** geo resolution and location-to-schema generation
-- **Phase 1B:** live enrichment providers for weather, carbon, and tariffs
-- **Phase 1C:** operating context wired into runtime simulation and dashboard telemetry
-- **Phase 2A:** topology foundation with buses, lines, feeders, topology summaries, and a cleaner mission-control dashboard
+- **Phase 1B:** weather, carbon, and tariff enrichment
+- **Phase 1C:** operating context wired into runtime simulation
+- **Phase 2A:** topology foundation with buses, lines, feeders, and summaries
+- **Phase 2B foundation:** city twin launcher, control entities, provenance, map-first frontend shell
 
-Current truth:
+In progress right now:
 
-- the platform is no longer just a manual district simulator
-- it can already resolve seeded real locations and enrich them with live context
-- Electricity Maps is currently integrated as a **live carbon signal provider**
-- the current Electricity Maps token is still **sandbox-mode**, so carbon data is provider-side sandbox until the production key is approved
-- the UI has been reframed as an operator control room, but the city-selection and full map-first twin flow are still ahead
-- the chosen map stack is now: **Open-Meteo Geocoding + MapLibre + PMTiles + Overture + Electricity Maps**
+- **Phase 2B hardening:** Electricity Maps `v4` live signal spine integration and frontend surfacing
 
-## Short Answer
+Next major phase:
 
-If I drive this with you continuously, the timeline is:
+- **Phase 2C:** feeder limits, congestion, outages, topology stress, and map overlays
 
-- **Phase 0 to Phase 1:** 4 to 6 days
-- **Phase 2:** 7 to 10 days
-- **Phase 3:** 10 to 14 days
-- **Phase 4:** 5 to 7 days
-- **Phase 5:** 7 to 10 days
+## What Was Just Added
 
-## Realistic Totals
+This latest slice upgraded Electricity Maps from a single carbon value into a richer live regional signal layer.
 
-- **Hackathon-winning upgraded MVP:** 3 to 4 weeks
-- **Serious end-to-end platform across all phases:** 6 to 8 weeks
-- **Production-polished version:** 10 to 12 weeks
+Implemented now:
 
-## Recommended Build Order
+- Electricity Maps `v4` integration in [C:\Users\saury\Desktop\devpost\nexus-grid\backend\nexusgrid\geo\enrichment.py](C:\Users\saury\Desktop\devpost\nexus-grid\backend\nexusgrid\geo\enrichment.py)
+- signal spine fields now include:
+  - carbon intensity
+  - renewable share
+  - total system load
+  - cross-border import/export totals
+  - net interchange state
+  - day-ahead wholesale price
+- backend payload now exposes those fields through:
+  - [C:\Users\saury\Desktop\devpost\nexus-grid\backend\nexusgrid\core\environment.py](C:\Users\saury\Desktop\devpost\nexus-grid\backend\nexusgrid\core\environment.py)
+  - [C:\Users\saury\Desktop\devpost\nexus-grid\backend\main.py](C:\Users\saury\Desktop\devpost\nexus-grid\backend\main.py)
+- geo metadata refresh now carries Electricity Maps provider mode and zone in:
+  - [C:\Users\saury\Desktop\devpost\nexus-grid\backend\nexusgrid\geo\service.py](C:\Users\saury\Desktop\devpost\nexus-grid\backend\nexusgrid\geo\service.py)
+- frontend types and UI now understand the new live signal fields in:
+  - [C:\Users\saury\Desktop\devpost\nexus-grid\frontend\src\hooks\useSimulationWebSocket.ts](C:\Users\saury\Desktop\devpost\nexus-grid\frontend\src\hooks\useSimulationWebSocket.ts)
+  - [C:\Users\saury\Desktop\devpost\nexus-grid\frontend\src\components\SignalDock.tsx](C:\Users\saury\Desktop\devpost\nexus-grid\frontend\src\components\SignalDock.tsx)
+  - [C:\Users\saury\Desktop\devpost\nexus-grid\frontend\src\components\OperatorDecisionPanel.tsx](C:\Users\saury\Desktop\devpost\nexus-grid\frontend\src\components\OperatorDecisionPanel.tsx)
+- frontend map crash hardening is also in progress in:
+  - [C:\Users\saury\Desktop\devpost\nexus-grid\frontend\src\components\TwinMapCanvas.tsx](C:\Users\saury\Desktop\devpost\nexus-grid\frontend\src\components\TwinMapCanvas.tsx)
+- backend env template now points at the correct Electricity Maps base:
+  - [C:\Users\saury\Desktop\devpost\nexus-grid\backend\.env.example](C:\Users\saury\Desktop\devpost\nexus-grid\backend\.env.example)
+- added a focused smoke test:
+  - [C:\Users\saury\Desktop\devpost\nexus-grid\backend\run_electricity_maps_signal_spine_test.py](C:\Users\saury\Desktop\devpost\nexus-grid\backend\run_electricity_maps_signal_spine_test.py)
 
-### Phase 0: Stabilize the current core
+## Electricity Maps Key Status
 
-Duration:
+The old key was still sandbox-mode.
 
-- 2 to 3 days
+The new key `7Ch2sg4ZDQwVABSQqzsF` was tested directly against Electricity Maps and behaved materially differently:
 
-Goals:
+- old key response included `SANDBOX MODE` disclaimer
+- new key response did **not** include the sandbox disclaimer
+- new key worked on live `v4` endpoints for:
+  - carbon intensity
+  - renewable energy share
+  - total load
+  - electricity flows
+  - day-ahead price
 
-- fix the DQN training path
-- clean up checkpoint handling
-- clean up encoding and documentation inconsistencies
-- separate sandbox simulation from the future universal engine
+Important nuance:
 
-Deliverables:
+- the new key is behaving as **live access**
+- some returned values are still marked `isEstimated: true`, which is normal and not the same thing as sandbox mode
 
-- reliable training flow
-- versioned model loading
-- cleaner repo structure
-- honest sandbox/runtime separation
+## Tests Run And Passing
 
-Status:
+Successful backend validation:
 
-- complete
+- `python run_electricity_maps_signal_spine_test.py`
+- `python run_geo_enrichment_test.py`
+- `python run_city_twin_test.py`
+- `python run_test.py`
 
-### Phase 1: Universal geo-to-schema engine
+Successful frontend validation:
 
-Duration:
+- `npm run lint`
+- `npm run build`
 
-- 2 to 3 days for a first version
-- 5 to 7 days for a stronger version
+Successful live provider verification:
 
-Goals:
+- direct live check with the new Electricity Maps key returned:
+  - `provider_mode = live`
+  - `zone = GB`
+  - `renewable_share_pct = 65.0`
+  - `total_load_mw = 33735.62`
+  - `day_ahead_price = 69.8`
+- backend route `POST /api/geo/enrich` also returned the live Electricity Maps spine correctly
 
-- accept location input instead of manual district-only configs
-- generate district schema from coordinates
-- attach weather, solar, carbon, and tariff context
+Operational note:
 
-Deliverables:
+- the backend server was restarted and is live on `http://127.0.0.1:8000`
+- browser automation CLI was not available in this environment, so there was **no full browser-driven visual verification** in this last slice
 
-- `LocationResolver`
-- `GeoTwinBuilder`
-- generated schema pipeline
-- live weather, carbon, and tariff enrichment
-- operating-context-driven runtime behavior
+## Current Uncommitted Worktree
 
-Status:
+At the moment of this handoff, the repo has validated but **uncommitted** changes.
 
-- complete for the first serious version
-- still needs stronger map ingestion and production-grade provider coverage
+Current modified/untracked files:
 
-### Phase 2: Real grid semantics
+- [C:\Users\saury\Desktop\devpost\nexus-grid\backend\.env.example](C:\Users\saury\Desktop\devpost\nexus-grid\backend\.env.example)
+- [C:\Users\saury\Desktop\devpost\nexus-grid\backend\main.py](C:\Users\saury\Desktop\devpost\nexus-grid\backend\main.py)
+- [C:\Users\saury\Desktop\devpost\nexus-grid\backend\nexusgrid\core\environment.py](C:\Users\saury\Desktop\devpost\nexus-grid\backend\nexusgrid\core\environment.py)
+- [C:\Users\saury\Desktop\devpost\nexus-grid\backend\nexusgrid\geo\enrichment.py](C:\Users\saury\Desktop\devpost\nexus-grid\backend\nexusgrid\geo\enrichment.py)
+- [C:\Users\saury\Desktop\devpost\nexus-grid\backend\nexusgrid\geo\service.py](C:\Users\saury\Desktop\devpost\nexus-grid\backend\nexusgrid\geo\service.py)
+- [C:\Users\saury\Desktop\devpost\nexus-grid\backend\run_electricity_maps_signal_spine_test.py](C:\Users\saury\Desktop\devpost\nexus-grid\backend\run_electricity_maps_signal_spine_test.py)
+- [C:\Users\saury\Desktop\devpost\nexus-grid\frontend\src\components\OperatorDecisionPanel.tsx](C:\Users\saury\Desktop\devpost\nexus-grid\frontend\src\components\OperatorDecisionPanel.tsx)
+- [C:\Users\saury\Desktop\devpost\nexus-grid\frontend\src\components\SignalDock.tsx](C:\Users\saury\Desktop\devpost\nexus-grid\frontend\src\components\SignalDock.tsx)
+- [C:\Users\saury\Desktop\devpost\nexus-grid\frontend\src\components\TwinMapCanvas.tsx](C:\Users\saury\Desktop\devpost\nexus-grid\frontend\src\components\TwinMapCanvas.tsx)
+- [C:\Users\saury\Desktop\devpost\nexus-grid\frontend\src\hooks\useSimulationWebSocket.ts](C:\Users\saury\Desktop\devpost\nexus-grid\frontend\src\hooks\useSimulationWebSocket.ts)
 
-Duration:
+Important:
 
-- 7 to 10 days
+- the local secret file `backend/.env` was updated with the new Electricity Maps key
+- that secret file is intentionally local and should not be committed
 
-Goals:
+## CTO Product Direction
 
-- move from building pool to graph-aware grid model
-- add buses, lines, transformers, feeders, and contingencies
+The right architecture remains:
 
-Deliverables:
+- **MapLibre + PMTiles + Overture + Open-Meteo Geocoding** for map-native twin UX
+- **Electricity Maps** for regional live signals
+- **our own twin builder** for feeders, buses, clusters, and controllable assets
+- **hybrid control** for actual decisions
 
-- extended schema
-- topology-aware simulator
-- failure and congestion events
+The wrong direction would be:
 
-Status:
+- trying to pretend Electricity Maps already gives us the whole city twin
 
-- **Phase 2A complete:** topology foundation exists
-- **Phase 2B next:** city-to-grid twin generation, map layers, and agent clustering
+The right direction is:
 
-### Phase 2B: City-To-Twin Architecture
-
-Duration:
-
-- 3 to 5 days for first strong version
-
-Goals:
-
-- let a user pick a city or coordinates and treat that geography as the active environment
-- use Electricity Maps for live external grid signals
-- build our own control-ready digital twin instead of pretending Electricity Maps is the twin
-
-Deliverables:
-
-- zone and city resolver
-- geo twin builder that outputs controllable assets, feeders, and demand clusters
-- map-first city selection flow
-- provenance panel showing which parts came from live APIs vs inference
-- free/open map foundation using Open-Meteo Geocoding, MapLibre, PMTiles, and Overture
-
-Core product opinion:
-
-- **Electricity Maps should be the live signal spine, not the full simulation engine**
-- we should not clone their map product
-- we should use their signals, then generate a richer control-ready twin that they do not provide
-- we should avoid paid map lock-in unless it becomes strictly necessary for premium UX
-
-### Phase 2C: Grid Events And Constraints
-
-Duration:
-
-- 3 to 5 days
-
-Goals:
-
-- make the topology behave like a real feeder instead of a static graph
-- add limits, congestion, switching, outages, and resilience drills
-
-Deliverables:
-
-- line loading constraints
-- feeder congestion model
-- outage and maintenance events
-- topology-aware recovery behavior
-
-### Phase 3: Hybrid intelligence
-
-Duration:
-
-- 10 to 14 days
-
-Goals:
-
-- combine rule-based control, optimization, and RL
-- make RL graph-aware and transferable
-
-Deliverables:
-
-- baseline controller
-- planner
-- improved MARL layer
-- evaluation harness
-
-Opinionated direction:
-
-- RL agents should represent **control entities** such as feeder controllers, storage fleets, EV fleets, campuses, and industrial clusters
-- they should **not** start as one-agent-per-every-generator in a whole city
-- optimization should handle planning, heuristics should handle safety fallback, and RL should handle adaptive decisions under uncertainty
-
-### Phase 4: Mission-control experience
-
-Duration:
-
-- 5 to 7 days
-
-Goals:
-
-- make the UI unforgettable
-- show resilience, intervention, replay, and counterfactuals
-
-Deliverables:
-
-- geo map
-- scenario replay
-- operator timeline
-- explainability and confidence panels
-
-Current note:
-
-- the dashboard has already been upgraded into a cleaner control-room layout
-- the next UI leap is map-first city selection plus topology and feeder overlays
-
-### Phase 5: Real-world integrations
-
-Duration:
-
-- 7 to 10 days
-
-Goals:
-
-- make it look deployable, not just simulated
-- add adapter architecture for protocols and external telemetry
-
-Deliverables:
-
-- integration adapters
-- telemetry contracts
-- edge/backend separation
-
-## Strategic Position
-
-The winning version of NEXUS GRID is **not**:
-
-- "Electricity Maps plus RL"
-
-The winning version is:
-
-- **Electricity Maps + geo ingestion + generated digital twin + hybrid control + operator theater**
-
-That means:
-
-- Electricity Maps provides live carbon, mix, imports, exports, load, and price context where available
-- NEXUS GRID generates the actual control-ready environment
-- the RL layer acts on inferred feeders, storage fleets, EV fleets, demand clusters, and critical assets
-- the operator UI explains what the system would do, why, and what happens under failures
-
-## What To Ask For Next
-
-These are the APIs and data sources we are most likely to need as we continue:
-
-- **Electricity Maps production key** for real carbon and signal coverage
-- **Open-Meteo Geocoding** for free city search and resolver fallback
-- **Overture / PMTiles data pipeline** for map-native twin enrichment
-- **A stronger weather or irradiance source** if we outgrow Open-Meteo for serious demos
-- **Non-U.S. tariff sources** if we want global price realism beyond heuristics
-
-## Next Resume Point
-
-When work resumes, the next best move is:
-
-1. start **Phase 2B**
-2. add city and zone selection as a first-class workflow
-3. define which real-world asset clusters become agents
-4. build the first map-to-twin pipeline that turns a chosen geography into a controllable RL environment
-
-## What I Recommend We Build First
-
-If the goal is to win fast, we should do this order:
-
-1. Phase 0
-2. Phase 1
-3. Phase 4
-4. Phase 2
-5. Phase 3
-6. Phase 5
-
-That order gives you the strongest early jump in:
-
-- demo quality
-- novelty
-- "works anywhere" credibility
-- judge memorability
-
-## Best Timeline Strategy
-
-### Option A: Fastest winning version
-
-Target:
-
-- 21 to 28 days
-
-Scope:
-
-- Phase 0
-- Phase 1
-- Phase 4
-- selected parts of Phase 2 and Phase 3
-
-### Option B: Full serious version
-
-Target:
-
-- 6 to 8 weeks
-
-Scope:
-
-- all phases fully implemented
+- use Electricity Maps as the live operating context
+- use NEXUS GRID to generate the control-ready graph
+- show operators what actions matter under live regional conditions
 
 ## Immediate Next Step
 
-The next best move is to start with:
+When work resumes, do this in order:
 
-1. fixing the current RL and preset pipeline
-2. designing the universal geo schema
-3. scaffolding the location-to-twin engine
-4. redesigning the UI around a map-first mission-control flow
+1. inspect `git status`
+2. preserve the current uncommitted signal-spine work
+3. commit the validated changes if still uncommitted
+4. continue into **Phase 2C**
+
+## Exact Next Build Goal
+
+The next best implementation target is:
+
+- add feeder constraints and line-loading stress
+- add congestion and outage events
+- render topology stress on the map
+- keep the UI sparse and cinematic, not card-heavy
+- use the new Electricity Maps live spine as the regional context for those events
+
+## Resume Prompt
+
+Use this next time:
+
+`Continue NEXUS GRID from the exact current handoff in docs/nexus-grid-execution-roadmap.md. First inspect git status and preserve the validated uncommitted Electricity Maps v4 signal-spine changes. Electricity Maps is now the live signal spine with carbon, renewable share, load, flows, and day-ahead price. Then continue into Phase 2C: feeder constraints, congestion, outage events, and topology stress overlays in the sparse map-first control room.`
+
+## Timeline Reality
+
+If driven continuously from here:
+
+- **strong hackathon-winning version:** about 3 to 4 weeks total
+- **serious end-to-end platform:** about 6 to 8 weeks
+- **production-polished version:** about 10 to 12 weeks

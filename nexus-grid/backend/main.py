@@ -311,6 +311,7 @@ async def ws_simulate(
         schema = _load_runtime_preset_schema(active_preset)
 
     runner = SimulationRunner(schema=schema, preset_id=active_preset)
+    grid_signal_spine = runner.env.grid_signal_spine
 
     await websocket.send_json(
         {
@@ -326,6 +327,17 @@ async def ws_simulate(
             "engine_version": runner.engine_version,
             "operating_context_mode": runner.operating_context_mode,
             "operating_context_live": runner.operating_context_live,
+            "electricity_maps_zone": grid_signal_spine.get("zone"),
+            "electricity_maps_provider_mode": grid_signal_spine.get("provider_mode"),
+            "grid_signal_estimated": grid_signal_spine.get("is_estimated"),
+            "grid_renewable_share_pct": grid_signal_spine.get("renewable_share_pct"),
+            "grid_total_load_mw": grid_signal_spine.get("total_load_mw"),
+            "grid_import_mw": grid_signal_spine.get("total_import_mw"),
+            "grid_export_mw": grid_signal_spine.get("total_export_mw"),
+            "grid_net_interchange_mw": grid_signal_spine.get("net_interchange_mw"),
+            "grid_interchange_state": grid_signal_spine.get("interchange_state"),
+            "grid_wholesale_price": grid_signal_spine.get("day_ahead_price"),
+            "grid_wholesale_price_unit": grid_signal_spine.get("day_ahead_price_unit"),
             "topology_summary": runner.topology_summary,
             "geo_context": runner.env.geo_context,
             "twin_summary": runner.env.twin_summary,

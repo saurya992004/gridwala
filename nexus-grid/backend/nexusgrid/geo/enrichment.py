@@ -22,7 +22,7 @@ OPEN_METEO_BASE_URL = os.getenv(
 )
 ELECTRICITY_MAPS_BASE_URL = os.getenv(
     "NEXUS_ELECTRICITY_MAPS_BASE_URL",
-    "https://api.electricitymaps.com/v3/carbon-intensity/latest",
+    "https://api.electricitymaps.com/v4",
 )
 OPENEI_BASE_URL = os.getenv(
     "NEXUS_OPENEI_BASE_URL",
@@ -55,6 +55,28 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _electricity_maps_headers(api_key: str) -> Dict[str, str]:
+    return {
+        "auth-token": api_key,
+        "User-Agent": "NEXUS-GRID/1.0 (electricity maps signal spine)",
+    }
+
+
+def _electricity_maps_latest(
+    path: str,
+    location: Dict[str, Any],
+    api_key: str,
+) -> Dict[str, Any]:
+    return _http_get_json(
+        f"{ELECTRICITY_MAPS_BASE_URL.rstrip('/')}/{path.lstrip('/')}",
+        params={
+            "lat": round(float(location["latitude"]), 6),
+            "lon": round(float(location["longitude"]), 6),
+        },
+        headers=_electricity_maps_headers(api_key),
+    )
+
+
 def _numeric_mean(values: List[Any]) -> float:
     series = [float(value) for value in values if isinstance(value, (int, float))]
     return mean(series) if series else 0.0
@@ -83,6 +105,41 @@ def _country_tariff_defaults(country_code: str) -> Tuple[str, float, float, floa
     if code == "br":
         return "BRL", 0.55, 0.78, 1.05
     return "USD", 0.10, 0.16, 0.23
+
+
+def _safe_optional_float(value: Any) -> Optional[float]:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _sum_mapping_values(values: Any) -> Optional[float]:
+    if not isinstance(values, dict):
+        return None
+
+    numeric_values: List[float] = []
+    for value in values.values():
+        numeric = _safe_optional_float(value)
+        if numeric is not None:
+            numeric_values.append(numeric)
+
+    if not numeric_values:
+        return None
+
+    return round(sum(numeric_values), 1)
+
+
+def _interchange_state(net_interchange_mw: Optional[float]) -> Optional[str]:
+    if net_interchange_mw is None:
+        return None
+    if abs(net_interchange_mw) < 1.0:
+        return "balanced"
+    if net_interchange_mw > 0:
+        return "net_importing"
+    return "net_exporting"
 
 
 class HeuristicWeatherProvider:
@@ -210,28 +267,79 @@ class ElectricityMapsCarbonProvider:
                 "Electricity Maps API key missing. Set NEXUS_ELECTRICITYMAPS_API_KEY."
             )
 
-        payload = _http_get_json(
-            ELECTRICITY_MAPS_BASE_URL,
-            params={
-                "lat": round(float(location["latitude"]), 6),
-                "lon": round(float(location["longitude"]), 6),
-            },
-            headers={
-                "auth-token": api_key,
-                "User-Agent": "NEXUS-GRID/1.0 (carbon enrichment)",
-            },
-        )
+        payload = _electricity_maps_latest("carbon-intensity/latest", location, api_key)
 
         intensity_g = float(payload.get("carbonIntensity"))
         intensity_kg = round(intensity_g / 1000.0, 3)
         warnings: List[str] = []
-        if payload.get("_disclaimer"):
-            warnings.append(str(payload["_disclaimer"]))
+        disclaimer = payload.get("_disclaimer")
+        if disclaimer:
+            warnings.append(str(disclaimer))
+
+        renewable_payload: Dict[str, Any] = {}
+        load_payload: Dict[str, Any] = {}
+        flows_payload: Dict[str, Any] = {}
+        price_payload: Dict[str, Any] = {}
+
+        try:
+            renewable_payload = _electricity_maps_latest("renewable-energy/latest", location, api_key)
+        except GeoEnrichmentError:
+            renewable_payload = {}
+
+        try:
+            load_payload = _electricity_maps_latest("total-load/latest", location, api_key)
+        except GeoEnrichmentError:
+            load_payload = {}
+
+        try:
+            flows_payload = _electricity_maps_latest("electricity-flows/latest", location, api_key)
+        except GeoEnrichmentError:
+            flows_payload = {}
+
+        try:
+            price_payload = _electricity_maps_latest("price-day-ahead/latest", location, api_key)
+        except GeoEnrichmentError:
+            price_payload = {}
+
+        flow_data = flows_payload.get("data")
+        flow_snapshot = flow_data[0] if isinstance(flow_data, list) and flow_data else {}
+        total_import_mw = _sum_mapping_values(flow_snapshot.get("import"))
+        total_export_mw = _sum_mapping_values(flow_snapshot.get("export"))
+        net_interchange_mw = (
+            round(total_import_mw - total_export_mw, 1)
+            if total_import_mw is not None and total_export_mw is not None
+            else None
+        )
+        renewable_share_pct = _safe_optional_float(renewable_payload.get("value"))
+        total_load_mw = _safe_optional_float(load_payload.get("value"))
+        day_ahead_price = _safe_optional_float(price_payload.get("value"))
+        provider_mode = "sandbox" if disclaimer else "live"
+
+        signal_spine = {
+            "provider": self.name,
+            "provider_mode": provider_mode,
+            "api_version": "v4",
+            "source_detail": "electricity-maps-v4-signal-spine",
+            "zone": payload.get("zone"),
+            "renewable_share_pct": round(renewable_share_pct, 1) if renewable_share_pct is not None else None,
+            "total_load_mw": round(total_load_mw, 2) if total_load_mw is not None else None,
+            "total_import_mw": total_import_mw,
+            "total_export_mw": total_export_mw,
+            "net_interchange_mw": net_interchange_mw,
+            "interchange_state": _interchange_state(net_interchange_mw),
+            "day_ahead_price": round(day_ahead_price, 2) if day_ahead_price is not None else None,
+            "day_ahead_price_unit": price_payload.get("unit"),
+            "day_ahead_price_source": price_payload.get("source"),
+            "is_estimated": bool(payload.get("isEstimated", False)),
+            "estimation_method": payload.get("estimationMethod"),
+            "updated_at": payload.get("updatedAt"),
+            "observed_at": payload.get("datetime"),
+        }
 
         return {
             "provider": self.name,
             "live": True,
-            "source_detail": "electricity-maps-latest",
+            "source_detail": "electricity-maps-v4-carbon-intensity",
             "carbon_profile": str(schema.get("carbon_profile", "custom")),
             "current_kg_per_kwh": intensity_kg,
             "current_g_per_kwh": round(intensity_g, 1),
@@ -239,6 +347,8 @@ class ElectricityMapsCarbonProvider:
             "is_estimated": bool(payload.get("isEstimated", False)),
             "updated_at": payload.get("updatedAt"),
             "observed_at": payload.get("datetime"),
+            "provider_mode": provider_mode,
+            "signal_spine": signal_spine,
             "warnings": warnings,
         }
 
@@ -488,6 +598,9 @@ class GeoEnrichmentService:
         data_sources["weather_live"] = enrichment["weather"]["source_detail"]
         data_sources["carbon_live"] = enrichment["carbon"]["source_detail"]
         data_sources["tariffs_live"] = enrichment["tariff"]["source_detail"]
+        carbon_signal_spine = enrichment["carbon"].get("signal_spine", {})
+        if isinstance(carbon_signal_spine, dict) and carbon_signal_spine.get("source_detail"):
+            data_sources["grid_signal_spine"] = carbon_signal_spine["source_detail"]
         enriched["data_sources"] = data_sources
 
         generation_summary = dict(enriched.get("generation_summary", {}))
@@ -495,6 +608,9 @@ class GeoEnrichmentService:
         generation_summary["applied_weather_provider"] = enrichment["weather"]["provider"]
         generation_summary["applied_carbon_provider"] = enrichment["carbon"]["provider"]
         generation_summary["applied_tariff_provider"] = enrichment["tariff"]["provider"]
+        generation_summary["electricity_maps_provider_mode"] = enrichment["carbon"].get(
+            "provider_mode"
+        )
         generation_summary["solar_capacity_factor"] = enrichment["weather"]["forecast"].get(
             "solar_capacity_factor"
         )

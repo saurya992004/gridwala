@@ -21,6 +21,32 @@ function derivePriority(payload: SimulationPayload | null) {
     };
   }
 
+  if (
+    payload.operating_context_live &&
+    typeof payload.grid_renewable_share_pct === "number" &&
+    payload.grid_renewable_share_pct < 35
+  ) {
+    return {
+      title: "Low renewable share on the regional grid",
+      detail: "This is a good interval to reduce imports, preserve flexibility, and prioritize local balancing.",
+      tone: "rgba(120, 53, 15, 0.35)",
+      icon: <CloudLightning size={16} color="var(--neon-amber)" />,
+    };
+  }
+
+  if (
+    payload.grid_interchange_state === "net_importing" &&
+    typeof payload.grid_net_interchange_mw === "number" &&
+    payload.grid_net_interchange_mw > 1000
+  ) {
+    return {
+      title: "Region is leaning on external imports",
+      detail: "Feeder coordinators should hold flexible demand and protect storage while the wider zone is importing heavily.",
+      tone: "rgba(8, 47, 73, 0.35)",
+      icon: <Brain size={16} color="var(--neon-cyan)" />,
+    };
+  }
+
   if (payload.grid_tariff_band === "high") {
     return {
       title: "High-cost utility window",

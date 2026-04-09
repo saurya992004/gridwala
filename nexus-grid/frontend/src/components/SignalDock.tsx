@@ -10,6 +10,23 @@ function metricValue(value: number | undefined, digits: number, suffix: string) 
   return `${value.toFixed(digits)} ${suffix}`.trim();
 }
 
+function compactPower(valueMw: number | undefined) {
+  if (typeof valueMw !== "number" || Number.isNaN(valueMw)) {
+    return "system load pending";
+  }
+  if (Math.abs(valueMw) >= 1000) {
+    return `${(valueMw / 1000).toFixed(1)} GW system`;
+  }
+  return `${valueMw.toFixed(0)} MW system`;
+}
+
+function compactMarket(value: number | undefined, unit: string | undefined) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "wholesale pending";
+  }
+  return `${value.toFixed(1)} ${unit || ""}`.trim();
+}
+
 function dockTile(
   eyebrow: string,
   title: string,
@@ -39,21 +56,31 @@ export default function SignalDock({ payload }: { payload: SimulationPayload | n
         "Grid",
         "Net load",
         metricValue(payload?.district_net_consumption, 2, "kW"),
-        payload?.controller_mode ? `${payload.controller_mode.toUpperCase()} controller` : "Awaiting controller state",
+        typeof payload?.grid_total_load_mw === "number"
+          ? `${payload.electricity_maps_zone || "zone"} · ${compactPower(payload.grid_total_load_mw)}`
+          : payload?.controller_mode
+            ? `${payload.controller_mode.toUpperCase()} controller`
+            : "Awaiting controller state",
         <Activity size={16} color="var(--neon-cyan)" />,
       )}
       {dockTile(
         "Carbon",
         "Intensity",
         metricValue(payload?.carbon_intensity, 3, "kgCO2/kWh"),
-        payload?.operating_context_live ? "Live-enriched signal" : "Static or heuristic signal",
+        payload?.grid_renewable_share_pct !== undefined
+          ? `${payload.electricity_maps_zone || "zone"} · ${payload.grid_renewable_share_pct.toFixed(0)}% renewable${payload.grid_signal_estimated ? " · estimated" : ""}`
+          : payload?.operating_context_live
+            ? "Live-enriched signal"
+            : "Static or heuristic signal",
         <CloudLightning size={16} color="var(--neon-green)" />,
       )}
       {dockTile(
         "Utility",
         "Tariff",
         metricValue(payload?.grid_tariff_rate, 3, payload?.grid_tariff_currency || "USD"),
-        payload?.grid_tariff_window || "utility schedule pending",
+        typeof payload?.grid_wholesale_price === "number"
+          ? `${payload?.grid_tariff_window || "utility schedule"} · wholesale ${compactMarket(payload.grid_wholesale_price, payload.grid_wholesale_price_unit)}`
+          : payload?.grid_tariff_window || "utility schedule pending",
         <Coins size={16} color="var(--neon-amber)" />,
       )}
       {dockTile(
@@ -76,7 +103,9 @@ export default function SignalDock({ payload }: { payload: SimulationPayload | n
         "Solar",
         "Forecast",
         metricValue(payload?.solar_capacity_factor, 2, "factor"),
-        payload?.weather_outlook || "weather outlook pending",
+        payload?.grid_interchange_state
+          ? `${payload.grid_interchange_state.replaceAll("_", " ")}`
+          : payload?.weather_outlook || "weather outlook pending",
         <Zap size={16} color="var(--neon-amber)" />,
       )}
     </div>

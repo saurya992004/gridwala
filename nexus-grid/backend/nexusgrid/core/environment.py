@@ -231,6 +231,7 @@ class NexusGridEnv:
         self._weather_context = dict(cfg.get("operating_context", {}).get("weather", {}))
         self._carbon_context = dict(cfg.get("operating_context", {}).get("carbon", {}))
         self._tariff_context = dict(cfg.get("operating_context", {}).get("tariff", {}))
+        self._grid_signal_spine = dict(self._carbon_context.get("signal_spine", {}))
         self._context_enabled = bool(cfg.get("operating_context"))
         self._context_live = any(
             bool(context.get("live"))
@@ -435,6 +436,17 @@ class NexusGridEnv:
             "tariff_source": self._tariff_source,
             "operating_context_mode": self._context_mode,
             "operating_context_live": self._context_live,
+            "electricity_maps_zone": self._grid_signal_spine.get("zone"),
+            "electricity_maps_provider_mode": self._grid_signal_spine.get("provider_mode"),
+            "grid_signal_estimated": self._grid_signal_spine.get("is_estimated"),
+            "grid_renewable_share_pct": self._grid_signal_spine.get("renewable_share_pct"),
+            "grid_total_load_mw": self._grid_signal_spine.get("total_load_mw"),
+            "grid_import_mw": self._grid_signal_spine.get("total_import_mw"),
+            "grid_export_mw": self._grid_signal_spine.get("total_export_mw"),
+            "grid_net_interchange_mw": self._grid_signal_spine.get("net_interchange_mw"),
+            "grid_interchange_state": self._grid_signal_spine.get("interchange_state"),
+            "grid_wholesale_price": self._grid_signal_spine.get("day_ahead_price"),
+            "grid_wholesale_price_unit": self._grid_signal_spine.get("day_ahead_price_unit"),
             "topology_summary": self._topology_summary,
             "geo_context": self._geo_context,
             "twin_summary": self._twin_summary,
@@ -651,6 +663,10 @@ class NexusGridEnv:
     @property
     def enrichment_warnings(self) -> List[str]:
         return self._enrichment_warnings
+
+    @property
+    def grid_signal_spine(self) -> Dict[str, Any]:
+        return self._grid_signal_spine
 
 
 def _safe_int(value: Any, default: int) -> int:

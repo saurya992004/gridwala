@@ -37,6 +37,10 @@ function hashValue(input: string) {
   return Math.abs(hash);
 }
 
+function safeId(value: unknown, fallback: string) {
+  return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
 function assetColor(assetType: string) {
   if (assetType === "ev") return "#8b5cf6";
   if (assetType === "industrial") return "#f59e0b";
@@ -98,7 +102,9 @@ function buildTwinFeatures(
 
   buildings.forEach((building, index) => {
     const angleOffset = (Math.PI * 2 * index) / Math.max(buildings.length, 1);
-    const jitter = (hashValue(building.id) % 1000) / 1000;
+    const buildingId = safeId(building.id, `asset-${index + 1}`);
+    const buildingType = typeof building.type === "string" ? building.type : "residential";
+    const jitter = (hashValue(buildingId) % 1000) / 1000;
     const radius = 0.008 + (index % 3) * 0.0035 + (jitter * 0.0018);
     const angle = angleOffset + (jitter * 0.35);
     const lngDelta = (radius * Math.cos(angle)) / Math.max(Math.cos((latitude * Math.PI) / 180), 0.25);
@@ -107,7 +113,7 @@ function buildTwinFeatures(
       longitude + lngDelta,
       latitude + latDelta,
     ];
-    coordinateMap.set(building.id, assetCoordinate);
+    coordinateMap.set(buildingId, assetCoordinate);
 
     assets.push({
       type: "Feature",
@@ -116,20 +122,27 @@ function buildTwinFeatures(
         coordinates: assetCoordinate,
       },
       properties: {
-        id: building.id,
-        label: building.id,
-        assetType: building.type,
-        batterySoc: building.battery_soc,
-        netConsumption: building.net_electricity_consumption,
-        color: assetColor(building.type),
+        id: buildingId,
+        label: buildingId,
+        assetType: buildingType,
+        batterySoc: typeof building.battery_soc === "number" ? building.battery_soc : 0,
+        netConsumption:
+          typeof building.net_electricity_consumption === "number"
+            ? building.net_electricity_consumption
+            : 0,
+        color: assetColor(buildingType),
       },
     });
   });
 
   const feeders: Feature<LineString>[] = [];
   const centroids: Feature<Point>[] = [];
-  controlEntities.forEach((entity) => {
-    const memberCoordinates = entity.member_buildings
+  controlEntities.forEach((entity, index) => {
+    const entityId = safeId(entity.id, `entity-${index + 1}`);
+    const entityLabel = typeof entity.label === "string" ? entity.label : entityId;
+    const entityRole = typeof entity.role === "string" ? entity.role : "grid_operator";
+    const memberBuildings = Array.isArray(entity.member_buildings) ? entity.member_buildings : [];
+    const memberCoordinates = memberBuildings
       .map((member) => coordinateMap.get(member))
       .filter((coordinate): coordinate is [number, number] => Boolean(coordinate));
 
@@ -149,14 +162,14 @@ function buildTwinFeatures(
         coordinates: centroid,
       },
       properties: {
-        id: entity.id,
-        label: entity.label,
-        role: entity.role,
-        memberCount: entity.member_buildings.length,
+        id: entityId,
+        label: entityLabel,
+        role: entityRole,
+        memberCount: memberBuildings.length,
       },
     });
 
-    if (entity.role === "feeder_coordinator") {
+    if (entityRole === "feeder_coordinator") {
       feeders.push({
         type: "Feature",
         geometry: {
@@ -164,9 +177,9 @@ function buildTwinFeatures(
           coordinates: [center, centroid],
         },
         properties: {
-          id: entity.id,
-          label: entity.label,
-          role: entity.role,
+          id: entityId,
+          label: entityLabel,
+          role: entityRole,
         },
       });
     }
