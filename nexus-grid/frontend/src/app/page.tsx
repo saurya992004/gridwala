@@ -7,21 +7,20 @@ import {
   AlertCircle,
   CloudLightning,
   Cpu,
-  Database,
-  Map as MapIcon,
   Pause,
   Play,
   Radar,
+  Waves,
   Zap,
 } from "lucide-react";
 import AssetRoster from "@/components/AssetRoster";
 import CityTwinLaunchPanel from "@/components/CityTwinLaunchPanel";
 import ControlEntitiesPanel from "@/components/ControlEntitiesPanel";
-import DistrictMap from "@/components/DistrictMap";
 import LedgerTable from "@/components/LedgerTable";
 import OperatorDecisionPanel from "@/components/OperatorDecisionPanel";
-import OperationsSummary from "@/components/OperationsSummary";
+import SignalDock from "@/components/SignalDock";
 import TelemetryCharts from "@/components/TelemetryCharts";
+import TwinMapCanvas from "@/components/TwinMapCanvas";
 import TwinProvenancePanel from "@/components/TwinProvenancePanel";
 import {
   GeoFeaturedLocation,
@@ -51,6 +50,17 @@ const FALLBACK_FEATURED_LOCATIONS: GeoFeaturedLocation[] = [
   },
 ];
 
+type IntelView = "decisions" | "trace" | "network" | "fleet" | "market" | "signals";
+
+function intelTabLabel(view: IntelView) {
+  if (view === "decisions") return "Decisions";
+  if (view === "trace") return "Trace";
+  if (view === "network") return "Network";
+  if (view === "fleet") return "Fleet";
+  if (view === "market") return "Market";
+  return "Signals";
+}
+
 export default function Home() {
   const {
     data,
@@ -64,10 +74,10 @@ export default function Home() {
     triggerForecast,
     loadCityTwin,
   } = useSimulationWebSocket();
-  const [activeTab, setActiveTab] = useState<"city" | "control" | "economy">("city");
   const [featuredLocations, setFeaturedLocations] = useState<GeoFeaturedLocation[]>(
     FALLBACK_FEATURED_LOCATIONS,
   );
+  const [intelView, setIntelView] = useState<IntelView>("decisions");
 
   useEffect(() => {
     let cancelled = false;
@@ -85,7 +95,7 @@ export default function Home() {
           setFeaturedLocations(payload.featured_locations);
         }
       } catch {
-        // Keep fallback catalog if the backend is not reachable during first paint.
+        // Keep the seeded locations if the backend is offline during first paint.
       }
     };
 
@@ -99,7 +109,7 @@ export default function Home() {
     hidden: { opacity: 0 },
     show: {
       opacity: 1,
-      transition: { staggerChildren: 0.08 },
+      transition: { staggerChildren: 0.06 },
     },
   };
 
@@ -108,20 +118,65 @@ export default function Home() {
     show: {
       opacity: 1,
       y: 0,
-      transition: { type: "spring", stiffness: 280, damping: 24 },
+      transition: { type: "spring", stiffness: 260, damping: 24 },
     },
   };
 
   const currentLocationLabel =
     data?.geo_context?.display_name || data?.district_name || "Adaptive Grid District";
+  const currentLocality =
+    data?.geo_context?.city || data?.geo_context?.locality || "Global twin";
   const twinModeLabel =
     data?.atlas_context?.mode === "city_to_twin" ? "CITY TWIN LIVE" : "SANDBOX DISTRICT";
+
+  const renderIntelView = () => {
+    if (intelView === "trace") {
+      return (
+        <TwinProvenancePanel
+          geoContext={data?.geo_context}
+          twinSummary={data?.twin_summary}
+          topologySummary={data?.topology_summary}
+          twinProvenance={data?.twin_provenance}
+          dataSources={data?.data_sources}
+          warnings={data?.enrichment_warnings}
+        />
+      );
+    }
+
+    if (intelView === "network") {
+      return <ControlEntitiesPanel controlEntities={data?.control_entities || []} />;
+    }
+
+    if (intelView === "fleet") {
+      return <AssetRoster buildings={data?.buildings || []} />;
+    }
+
+    if (intelView === "market") {
+      return (
+        <div className="glass-panel" style={{ minHeight: "100%", overflow: "hidden" }}>
+          <LedgerTable buildings={data?.buildings || []} />
+        </div>
+      );
+    }
+
+    if (intelView === "signals") {
+      return history.length > 0 ? (
+        <div className="glass-panel" style={{ minHeight: "100%", overflow: "hidden", padding: 0 }}>
+          <TelemetryCharts history={history} />
+        </div>
+      ) : (
+        <div className="glass-panel rail-placeholder">Collecting telemetry for signal charts...</div>
+      );
+    }
+
+    return <OperatorDecisionPanel payload={data} />;
+  };
 
   return (
     <>
       <div className="mesh-bg" />
 
-      <nav className="top-nav">
+      <nav className="top-nav terminal-nav">
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="brand-text">
           <div
             style={{
@@ -158,57 +213,14 @@ export default function Home() {
           {data?.engine_mode && (
             <div
               className="status-badge"
-              style={{ color: "var(--neon-cyan)", background: "rgba(6, 182, 212, 0.1)", boxShadow: "none" }}
+              style={{
+                color: "var(--neon-cyan)",
+                background: "rgba(6, 182, 212, 0.1)",
+                boxShadow: "none",
+              }}
             >
               <Cpu size={12} />
               {data.engine_mode.toUpperCase()}
-            </div>
-          )}
-
-          {data?.controller_mode && (
-            <div
-              className="status-badge"
-              style={{
-                color: data.controller_mode === "dqn" ? "var(--neon-blue)" : "var(--neon-amber)",
-                background:
-                  data.controller_mode === "dqn"
-                    ? "rgba(59, 130, 246, 0.12)"
-                    : "rgba(245, 158, 11, 0.12)",
-                boxShadow: "none",
-              }}
-            >
-              <Cpu size={12} />
-              {data.controller_mode === "dqn" ? "DQN" : "RULE"}
-            </div>
-          )}
-
-          {data?.operating_context_mode && data.operating_context_mode !== "static" && (
-            <div
-              className="status-badge"
-              style={{
-                color: data.operating_context_live ? "var(--neon-green)" : "var(--neon-amber)",
-                background: data.operating_context_live
-                  ? "rgba(16, 185, 129, 0.1)"
-                  : "rgba(245, 158, 11, 0.12)",
-                boxShadow: "none",
-              }}
-            >
-              <CloudLightning size={12} />
-              {data.operating_context_live ? "LIVE CONTEXT" : "ENRICHED CONTEXT"}
-            </div>
-          )}
-
-          {data?.forecast_scenario && (
-            <div
-              className="status-badge"
-              style={{
-                color: "var(--neon-amber)",
-                background: "rgba(245, 158, 11, 0.1)",
-                boxShadow: "none",
-              }}
-            >
-              <AlertCircle size={12} />
-              {data.forecast_scenario.toUpperCase()} +{data.forecast_steps_left}
             </div>
           )}
 
@@ -221,189 +233,98 @@ export default function Home() {
             }}
           >
             <Activity size={12} />
-            {isConnected ? "SYSTEM LIVE" : "OFFLINE"}
+            {isConnected ? "TERMINAL ACTIVE" : "OFFLINE"}
           </div>
         </motion.div>
       </nav>
 
-      <motion.main className="dashboard-grid" variants={containerVars} initial="hidden" animate="show">
-        <div className="main-column">
-          <motion.div
-            variants={itemVars}
-            className="glass-panel"
-            style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "18px" }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                gap: "16px",
-                flexWrap: "wrap",
-              }}
-            >
-              <div>
-                <div style={{ color: "var(--text-muted)", fontSize: "0.76rem", letterSpacing: "0.14em", textTransform: "uppercase" }}>
-                  Intelligent Control Room
-                </div>
-                <h1 style={{ fontSize: "1.5rem", marginTop: "6px" }}>{currentLocationLabel}</h1>
-                <div style={{ color: "var(--text-secondary)", marginTop: "8px", maxWidth: "720px", lineHeight: 1.5 }}>
-                  Mission control for city-to-digital-twin operations. Electricity Maps feeds the external reality; NEXUS GRID turns that location into feeders, asset clusters, and eventually RL-owned control surfaces.
-                </div>
-              </div>
+      <motion.main className="terminal-shell" variants={containerVars} initial="hidden" animate="show">
+        <motion.aside variants={itemVars} className="terminal-rail left-rail">
+          <CityTwinLaunchPanel
+            featuredLocations={featuredLocations}
+            currentLocationLabel={currentLocationLabel}
+            isLaunching={isTwinLoading}
+            error={twinError}
+            onLaunch={loadCityTwin}
+          />
+        </motion.aside>
 
-              <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
-                <button className="btn btn-primary" onClick={togglePause} style={{ minWidth: "138px" }}>
-                  {isPaused ? (
-                    <>
-                      <Play size={18} /> RESUME
-                    </>
-                  ) : (
-                    <>
-                      <Pause size={18} /> PAUSE
-                    </>
-                  )}
-                </button>
-                <button className="btn btn-outline" onClick={() => triggerForecast("heatwave", 6)}>
-                  <CloudLightning size={18} color="var(--neon-amber)" /> Forecast Heatwave
-                </button>
-                <button className="btn btn-danger" onClick={() => triggerEmergency("carbon_spike")}>
-                  <AlertCircle size={18} /> Carbon Spike
-                </button>
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div variants={itemVars}>
-            <CityTwinLaunchPanel
-              featuredLocations={featuredLocations}
-              currentLocationLabel={currentLocationLabel}
-              isLaunching={isTwinLoading}
-              error={twinError}
-              onLaunch={loadCityTwin}
-            />
-          </motion.div>
-
-          <motion.div variants={itemVars}>
-            <OperationsSummary payload={data} />
-          </motion.div>
-
-          <motion.div
-            variants={itemVars}
-            className="glass-panel"
-            style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: "360px" }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: "16px",
-                padding: "20px 20px 0 20px",
-                flexWrap: "wrap",
-              }}
-            >
-              <div>
-                <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", letterSpacing: "0.14em", textTransform: "uppercase" }}>
-                  Digital Twin Theater
-                </div>
-                <h3 style={{ fontSize: "1.1rem", marginTop: "4px" }}>
-                  {activeTab === "city"
-                    ? "Asset Theatre"
-                    : activeTab === "control"
-                      ? "Control Entity Theatre"
-                      : "Settlement Theatre"}
-                </h3>
-              </div>
-              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-                <button
-                  className={`btn ${activeTab === "city" ? "btn-primary" : "btn-outline"}`}
-                  onClick={() => setActiveTab("city")}
-                  style={{ padding: "8px 16px" }}
-                >
-                  <MapIcon size={16} /> District Twin
-                </button>
-                <button
-                  className={`btn ${activeTab === "control" ? "btn-primary" : "btn-outline"}`}
-                  onClick={() => setActiveTab("control")}
-                  style={{ padding: "8px 16px" }}
-                >
-                  <Cpu size={16} /> Control Entities
-                </button>
-                <button
-                  className={`btn ${activeTab === "economy" ? "btn-primary" : "btn-outline"}`}
-                  onClick={() => setActiveTab("economy")}
-                  style={{ padding: "8px 16px" }}
-                >
-                  <Database size={16} /> Market Ledger
-                </button>
+        <motion.section variants={itemVars} className="map-stage-panel">
+          <div className="map-stage-toolbar">
+            <div>
+              <div className="map-stage-eyebrow">Intelligence Terminal</div>
+              <h1 className="map-stage-title">{currentLocality}</h1>
+              <div className="map-stage-copy">
+                Map-first digital twin view with city launch, synthetic feeder geometry, and control entities layered around live operating context.
               </div>
             </div>
 
-            <div
-              style={{
-                flex: 1,
-                display: "flex",
-                overflow: "hidden",
-                border: "1px dashed rgba(255,255,255,0.05)",
-                borderRadius: "16px",
-                background: "rgba(0,0,0,0.12)",
-                margin: "20px",
-                minHeight: "300px",
-              }}
-            >
-              {activeTab === "city" && data?.buildings ? (
-                <DistrictMap buildings={data.buildings} />
-              ) : activeTab === "control" ? (
-                <ControlEntitiesPanel controlEntities={data?.control_entities || []} />
-              ) : activeTab === "economy" && data?.buildings ? (
-                <LedgerTable buildings={data.buildings} />
-              ) : (
-                <div style={{ margin: "auto", textAlign: "center", opacity: 0.5 }}>
-                  <Cpu size={48} style={{ margin: "0 auto 16px auto" }} />
-                  Awaiting Telemetry...
-                </div>
-              )}
+            <div className="map-stage-actions">
+              <button className="btn btn-primary" onClick={togglePause} style={{ minWidth: "124px" }}>
+                {isPaused ? (
+                  <>
+                    <Play size={18} /> Resume
+                  </>
+                ) : (
+                  <>
+                    <Pause size={18} /> Pause
+                  </>
+                )}
+              </button>
+              <button className="btn btn-outline" onClick={() => triggerForecast("heatwave", 6)}>
+                <CloudLightning size={18} color="var(--neon-amber)" />
+                Forecast
+              </button>
+              <button className="btn btn-danger" onClick={() => triggerEmergency("carbon_spike")}>
+                <AlertCircle size={18} />
+                Carbon Spike
+              </button>
             </div>
-          </motion.div>
+          </div>
 
-          <motion.div variants={itemVars} className="glass-panel" style={{ padding: 0, overflow: "hidden", minHeight: "290px" }}>
-            {history.length > 0 ? (
-              <TelemetryCharts history={history} />
-            ) : (
-              <div
-                style={{
-                  display: "flex",
-                  minHeight: "290px",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "var(--text-secondary)",
-                }}
-              >
-                Collecting data for charts...
-              </div>
-            )}
-          </motion.div>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: "24px", minHeight: 0 }}>
-          <motion.div variants={itemVars} style={{ minHeight: 0 }}>
-            <TwinProvenancePanel
+          <div className="map-stage-frame">
+            <TwinMapCanvas
               geoContext={data?.geo_context}
+              buildings={data?.buildings || []}
+              controlEntities={data?.control_entities || []}
               twinSummary={data?.twin_summary}
-              topologySummary={data?.topology_summary}
-              twinProvenance={data?.twin_provenance}
-              dataSources={data?.data_sources}
-              warnings={data?.enrichment_warnings}
             />
-          </motion.div>
-          <motion.div variants={itemVars} style={{ minHeight: 0 }}>
-            <OperatorDecisionPanel payload={data} />
-          </motion.div>
-          <motion.div variants={itemVars} style={{ minHeight: 0, flex: 1 }}>
-            <AssetRoster buildings={data?.buildings || []} />
-          </motion.div>
-        </div>
+          </div>
+        </motion.section>
+
+        <motion.aside variants={itemVars} className="terminal-rail right-rail">
+          <div className="rail-shell glass-panel">
+            <div className="rail-header">
+              <div>
+                <div className="map-stage-eyebrow">Intelligence Rail</div>
+                <div className="rail-title">{intelTabLabel(intelView)}</div>
+              </div>
+              <div className="rail-status">
+                <Waves size={14} />
+                Live
+              </div>
+            </div>
+
+            <div className="rail-tabs">
+              {(["decisions", "trace", "network", "fleet", "market", "signals"] as IntelView[]).map((view) => (
+                <button
+                  key={view}
+                  type="button"
+                  className={`rail-tab ${intelView === view ? "active" : ""}`}
+                  onClick={() => setIntelView(view)}
+                >
+                  {intelTabLabel(view)}
+                </button>
+              ))}
+            </div>
+
+            <div className="rail-content">{renderIntelView()}</div>
+          </div>
+        </motion.aside>
+
+        <motion.section variants={itemVars} className="terminal-dock glass-panel">
+          <SignalDock payload={data} />
+        </motion.section>
       </motion.main>
     </>
   );

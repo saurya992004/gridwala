@@ -56,6 +56,11 @@ Use for:
 - efficient local or edge-served basemaps
 - controlled map rendering without relying on consumer map APIs
 
+Frontend hooks:
+
+- `NEXT_PUBLIC_NEXUS_MAP_STYLE_URL`
+- `NEXT_PUBLIC_NEXUS_PMTILES_URL`
+
 ### Overture
 
 Use for:

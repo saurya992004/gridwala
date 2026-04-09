@@ -1,3 +1,4 @@
+import { ReactNode } from "react";
 import {
   Activity,
   Battery,
@@ -22,7 +23,7 @@ function fleetStats(buildings: BuildingState[]) {
   const importing = buildings.filter((building) => building.net_electricity_consumption > 0.25).length;
   const exporting = buildings.filter((building) => building.net_electricity_consumption < -0.25).length;
   const averageSoc = average(buildings.map((building) => building.battery_soc)) * 100;
-  const walletBalance = buildings.reduce((sum, building) => sum + building.nexus_wallet, 0);
+  const walletBalance = buildings.reduce((sum, building) => sum + (building.nexus_wallet || 0), 0);
   return { importing, exporting, averageSoc, walletBalance };
 }
 
@@ -32,7 +33,7 @@ function summaryCard(
   eyebrow: string,
   primary: string,
   secondary: string,
-  icon: JSX.Element,
+  icon: ReactNode,
   tone: string,
 ) {
   return (

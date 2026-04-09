@@ -1,6 +1,14 @@
 import { motion } from "framer-motion";
 import { BuildingState } from "@/hooks/useSimulationWebSocket";
-import { Database, TrendingUp, TrendingDown, Coins } from "lucide-react";
+import { Coins, Database, TrendingDown, TrendingUp } from "lucide-react";
+
+function formatMetric(value: number | undefined, digits: number) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "--";
+  }
+
+  return value.toFixed(digits);
+}
 
 export default function LedgerTable({ buildings }: { buildings: BuildingState[] }) {
   if (!buildings || buildings.length === 0) return null;
@@ -24,36 +32,58 @@ export default function LedgerTable({ buildings }: { buildings: BuildingState[] 
           </tr>
         </thead>
         <tbody>
-          {buildings.map((b, idx) => {
-            const P2P_Volume = b.p2p_traded_kwh || 0;
-            const isSeller = P2P_Volume > 0 && b.nexus_tokens_earned > 0;
-            const isBuyer = P2P_Volume > 0 && b.nexus_tokens_earned < 0;
+          {buildings.map((building, index) => {
+            const p2pVolume = building.p2p_traded_kwh || 0;
+            const nexusTokensEarned = building.nexus_tokens_earned || 0;
+            const walletBalance = building.nexus_wallet || 0;
+            const isSeller = p2pVolume > 0 && nexusTokensEarned > 0;
+            const isBuyer = p2pVolume > 0 && nexusTokensEarned < 0;
 
             return (
-              <motion.tr 
-                key={b.id}
+              <motion.tr
+                key={`${building.id ?? "node"}-${building.type ?? "asset"}-${index}`}
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.05 }}
-                style={{ 
+                transition={{ delay: index * 0.05 }}
+                style={{
                   borderBottom: "1px solid rgba(255,255,255,0.02)",
-                  background: isSeller ? "rgba(16, 185, 129, 0.05)" : isBuyer ? "rgba(239, 68, 68, 0.05)" : "transparent"
+                  background: isSeller
+                    ? "rgba(16, 185, 129, 0.05)"
+                    : isBuyer
+                      ? "rgba(239, 68, 68, 0.05)"
+                      : "transparent",
                 }}
               >
-                <td style={{ padding: "12px", fontFamily: "var(--font-display)", fontWeight: 600 }}>{b.id ? b.id.substring(0,8) : "Node"}</td>
-                <td style={{ padding: "12px", textTransform: "uppercase", fontSize: "0.75rem", color: "var(--text-muted)" }}>{b.type || "—"}</td>
+                <td style={{ padding: "12px", fontFamily: "var(--font-display)", fontWeight: 600 }}>
+                  {building.id ? building.id.substring(0, 8) : "Node"}
+                </td>
+                <td style={{ padding: "12px", textTransform: "uppercase", fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                  {building.type || "--"}
+                </td>
                 <td style={{ padding: "12px" }}>
-                  {P2P_Volume > 0 ? (
+                  {p2pVolume > 0 ? (
                     <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: isSeller ? "var(--neon-green)" : "var(--neon-red)" }}>
                       {isSeller ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                      {P2P_Volume.toFixed(2)}
+                      {p2pVolume.toFixed(2)}
                     </span>
-                  ) : "—"}
+                  ) : "--"}
                 </td>
-                <td style={{ padding: "12px", opacity: 0.6 }}>{b.grid_exchanged_kwh ? Math.abs(b.grid_exchanged_kwh).toFixed(2) : "—"}</td>
-                <td style={{ padding: "12px", textAlign: "right", fontFamily: "var(--font-display)", fontWeight: 700, color: b.nexus_wallet > 0 ? "var(--neon-green)" : "var(--neon-red)" }}>
+                <td style={{ padding: "12px", opacity: 0.6 }}>
+                  {typeof building.grid_exchanged_kwh === "number"
+                    ? Math.abs(building.grid_exchanged_kwh).toFixed(2)
+                    : "--"}
+                </td>
+                <td
+                  style={{
+                    padding: "12px",
+                    textAlign: "right",
+                    fontFamily: "var(--font-display)",
+                    fontWeight: 700,
+                    color: walletBalance > 0 ? "var(--neon-green)" : "var(--neon-red)",
+                  }}
+                >
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "6px" }}>
-                    {b.nexus_wallet.toFixed(2)} <Coins size={14} />
+                    {formatMetric(walletBalance, 2)} <Coins size={14} />
                   </div>
                 </td>
               </motion.tr>
