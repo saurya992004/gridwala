@@ -17,7 +17,7 @@ export default function DistrictMap({ buildings }: { buildings: BuildingState[] 
       overflowX: "hidden",
       alignContent: "start"
     }}>
-      {buildings.map((b) => {
+      {buildings.map((b, index) => {
         
         // Visual logic based on stats
         const isEv = b.type === "ev";
@@ -37,7 +37,7 @@ export default function DistrictMap({ buildings }: { buildings: BuildingState[] 
 
         return (
           <motion.div 
-            key={b.id}
+            key={`${b.id ?? "node"}-${b.type ?? "asset"}-${index}`}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: isAway ? 0.4 : 1, scale: 1, boxShadow: `0 0 20px ${outerGlow}` }}
             style={{ 

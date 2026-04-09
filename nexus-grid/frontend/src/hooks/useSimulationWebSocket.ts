@@ -8,10 +8,10 @@ export interface BuildingState {
   solar_generation: number;
   battery_soc: number;
   reward: number;
-  p2p_traded_kwh: number;
-  grid_exchanged_kwh: number;
-  nexus_tokens_earned: number;
-  nexus_wallet: number;
+  p2p_traded_kwh?: number;
+  grid_exchanged_kwh?: number;
+  nexus_tokens_earned?: number;
+  nexus_wallet?: number;
 }
 
 export interface SimulationPayload {

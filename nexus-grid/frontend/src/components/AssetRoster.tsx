@@ -9,6 +9,14 @@ function assetState(building: BuildingState) {
   return "balanced";
 }
 
+function formatMetric(value: number | undefined, digits: number) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "--";
+  }
+
+  return value.toFixed(digits);
+}
+
 
 export default function AssetRoster({ buildings }: { buildings: BuildingState[] }) {
   const ranked = [...buildings].sort(
@@ -47,7 +55,7 @@ export default function AssetRoster({ buildings }: { buildings: BuildingState[] 
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "10px", overflowY: "auto" }}>
-        {ranked.map((building) => {
+        {ranked.map((building, index) => {
           const state = assetState(building);
           const color =
             state === "exporting"
@@ -63,7 +71,7 @@ export default function AssetRoster({ buildings }: { buildings: BuildingState[] 
 
           return (
             <div
-              key={building.id}
+              key={`${building.id ?? "asset"}-${building.type ?? "node"}-${index}`}
               style={{
                 display: "grid",
                 gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 0.8fr) minmax(0, 0.8fr)",
@@ -103,7 +111,7 @@ export default function AssetRoster({ buildings }: { buildings: BuildingState[] 
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", color }}>
                   {state === "exporting" ? <ArrowDownRight size={14} /> : <ArrowUpRight size={14} />}
                   <span style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}>
-                    {Math.abs(building.net_electricity_consumption).toFixed(2)}
+                    {formatMetric(Math.abs(building.net_electricity_consumption), 2)}
                   </span>
                 </div>
               </div>
@@ -120,7 +128,7 @@ export default function AssetRoster({ buildings }: { buildings: BuildingState[] 
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "var(--text-secondary)" }}>
                   <Wallet size={14} />
                   <span style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}>
-                    {building.nexus_wallet.toFixed(1)}
+                    {formatMetric(building.nexus_wallet, 1)}
                   </span>
                 </div>
               </div>
