@@ -23,18 +23,39 @@ export default function CityTwinLaunchPanel({
   const [districtType, setDistrictType] = useState("auto");
   const [buildingCount, setBuildingCount] = useState("8");
 
-  const launchCityTwin = async () => {
+  const launchSpecificTwin = async (
+    nextQuery: string,
+    nextDistrictType: string,
+    nextBuildingCount: string = buildingCount,
+  ) => {
+    setQuery(nextQuery);
+    setDistrictType(nextDistrictType);
     await onLaunch({
-      query,
-      districtType,
-      buildingCount: Number.parseInt(buildingCount, 10),
+      query: nextQuery,
+      districtType: nextDistrictType,
+      buildingCount: Number.parseInt(nextBuildingCount, 10),
     });
+  };
+
+  const launchCityTwin = async () => {
+    try {
+      await launchSpecificTwin(query, districtType, buildingCount);
+    } catch {
+      // Error state is handled by the websocket hook.
+    }
   };
 
   return (
     <div
       className="glass-panel"
-      style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "18px" }}
+      style={{
+        padding: "20px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "18px",
+        height: "100%",
+        overflowY: "auto",
+      }}
     >
       <div
         style={{
@@ -75,7 +96,7 @@ export default function CityTwinLaunchPanel({
             Active Twin
           </div>
           <div style={{ marginTop: "6px", fontFamily: "var(--font-display)", fontWeight: 700 }}>
-            {currentLocationLabel || "Residential District"}
+            {isLaunching ? `Launching ${query}...` : currentLocationLabel || "Residential District"}
           </div>
         </div>
       </div>
@@ -84,10 +105,14 @@ export default function CityTwinLaunchPanel({
         {featuredLocations.map((item) => (
           <button
             key={`${item.query}-${item.location.display_name}`}
-            className="chip-button"
+            className={`chip-button ${query === item.query ? "active" : ""}`}
+            disabled={isLaunching}
             onClick={() => {
-              setQuery(item.query);
-              setDistrictType(item.recommended_district_type || "auto");
+              void launchSpecificTwin(
+                item.query,
+                item.recommended_district_type || "auto",
+                buildingCount,
+              ).catch(() => undefined);
             }}
             type="button"
           >
@@ -147,7 +172,7 @@ export default function CityTwinLaunchPanel({
 
         <button className="btn btn-primary" disabled={isLaunching} onClick={launchCityTwin} type="button">
           <PlayCircle size={18} />
-          {isLaunching ? "Launching..." : "Launch Twin"}
+          {isLaunching ? "Launching..." : "Launch Custom Twin"}
         </button>
       </div>
 

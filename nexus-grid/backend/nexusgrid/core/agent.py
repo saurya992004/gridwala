@@ -18,6 +18,7 @@ class RuleBasedAgent:
     CARBON_HIGH_THRESHOLD = 0.44
     SOC_FULL_THRESHOLD = 0.90
     SOC_EMPTY_THRESHOLD = 0.15
+    TOPOLOGY_STRESSED_STATUSES = {"warning", "critical", "overload", "outage"}
 
     def decide(
         self,
@@ -37,6 +38,14 @@ class RuleBasedAgent:
             solar = building["solar_generation"]
             soc = building["battery_soc"]
             is_ev_away = building.get("is_ev_away", False)
+            feeder_status = building.get("feeder_status", "nominal")
+            line_status = building.get("line_status", "nominal")
+            net_load = float(building.get("net_electricity_consumption", 0.0))
+            topology_outage = feeder_status == "outage" or line_status == "outage"
+            topology_stressed = (
+                feeder_status in self.TOPOLOGY_STRESSED_STATUSES
+                or line_status in self.TOPOLOGY_STRESSED_STATUSES
+            )
 
             if is_ev_away:
                 action = 0.0
@@ -45,6 +54,14 @@ class RuleBasedAgent:
                     action = 1.0 if soc < 1.0 else 0.0
                 else:
                     action = 0.0
+            elif topology_outage and net_load > 0 and soc > self.SOC_EMPTY_THRESHOLD:
+                action = -1.0
+            elif topology_outage and solar > 0.2 and soc < self.SOC_FULL_THRESHOLD:
+                action = 0.9
+            elif topology_stressed and net_load > 0 and soc > self.SOC_EMPTY_THRESHOLD:
+                action = -0.8 if feeder_status in {"critical", "overload"} else -0.6
+            elif topology_stressed and net_load < -0.15 and soc < self.SOC_FULL_THRESHOLD:
+                action = 0.7
             elif tariff_is_expensive and soc > self.SOC_EMPTY_THRESHOLD:
                 action = -0.9
             elif tariff_is_cheap and soc < self.SOC_FULL_THRESHOLD:
@@ -83,12 +100,28 @@ class RuleBasedAgent:
             action = actions[i]
             p2p_traded = abs(building.get("p2p_traded_kwh", 0.0))
             p2p_str = f" | P2P traded: {p2p_traded:.2f} kWh" if p2p_traded > 0 else ""
+            feeder_label = building.get("feeder_label", building.get("feeder_id", "local feeder"))
+            feeder_status = building.get("feeder_status", "nominal")
+            line_status = building.get("line_status", "nominal")
+            topology_adjustment = building.get("topology_reward_adjustment", 0.0)
 
             if is_ev_away:
                 reason = "Mobile asset (EV) is away driving and disconnected from the grid."
             elif forecast_scenario and action > 0.3:
                 reason = (
                     f"PRE-COGNITION OVERRIDE: stockpiling energy ahead of {forecast_scenario}."
+                )
+            elif feeder_status == "outage" or line_status == "outage":
+                reason = (
+                    f"RESILIENCE OVERRIDE: {feeder_label} is in outage mode. "
+                    f"Prioritising local islanding support and minimizing grid dependence."
+                    f" Topology reward adj: {topology_adjustment:.3f}.{p2p_str}"
+                )
+            elif feeder_status in {"warning", "critical", "overload"} or line_status in {"warning", "critical", "overload"}:
+                reason = (
+                    f"FEEDER RELIEF: {feeder_label} is {feeder_status}. "
+                    f"Dispatch is shifted to reduce stressed branch loading."
+                    f" Topology reward adj: {topology_adjustment:.3f}.{p2p_str}"
                 )
             elif tariff_band == "high" and action < -0.3:
                 reason = (

@@ -29,6 +29,7 @@ from nexusgrid.core.model_registry import (
 ACTIONS = [-1.0, -0.5, 0.0, 0.5, 1.0]
 N_ACTIONS = len(ACTIONS)
 STATE_FEATURES_PER_BUILDING = 5
+TOPOLOGY_STRESSED_STATUSES = {"warning", "critical", "overload", "outage"}
 
 
 class QNetwork(nn.Module):
@@ -111,10 +112,18 @@ class DQNAgent:
         p2p_earned = float(building.get("nexus_tokens_earned", 0.0))
         grid_exchange = float(building.get("grid_exchanged_kwh", 0.0))
         soc = float(building.get("battery_soc", 0.5))
+        feeder_status = str(building.get("feeder_status", "nominal"))
+        line_status = str(building.get("line_status", "nominal"))
+        topology_stress = float(building.get("topology_stress_index", 0.0))
 
         grid_carbon_cost = max(0.0, grid_exchange) * carbon * 0.5
         soc_health = -abs(soc - 0.5) * 0.5
-        return float(p2p_earned - grid_carbon_cost + soc_health)
+        topology_penalty = 0.0
+        if feeder_status in TOPOLOGY_STRESSED_STATUSES or line_status in TOPOLOGY_STRESSED_STATUSES:
+            topology_penalty += abs(grid_exchange) * (0.08 + (topology_stress * 0.2))
+        if feeder_status == "outage" or line_status == "outage":
+            topology_penalty += max(grid_exchange, 0.0) * 0.4
+        return float(p2p_earned - grid_carbon_cost + soc_health - topology_penalty)
 
     def _restore_checkpoint(self, checkpoint: Dict) -> bool:
         if checkpoint.get("n_buildings") != self.n_buildings:
@@ -199,6 +208,25 @@ class DQNAgent:
         adjusted = action
         soc = float(building.get("battery_soc", 0.5))
         solar = float(building.get("solar_generation", 0.0))
+        net_load = float(building.get("net_electricity_consumption", 0.0))
+        feeder_status = str(building.get("feeder_status", "nominal"))
+        line_status = str(building.get("line_status", "nominal"))
+        topology_outage = feeder_status == "outage" or line_status == "outage"
+        topology_stressed = (
+            feeder_status in TOPOLOGY_STRESSED_STATUSES
+            or line_status in TOPOLOGY_STRESSED_STATUSES
+        )
+
+        if topology_outage:
+            if net_load > 0 and soc > 0.18:
+                adjusted = min(adjusted, -0.85)
+            elif solar > 0.2 and soc < 0.92:
+                adjusted = max(adjusted, 0.75)
+        elif topology_stressed:
+            if net_load > 0 and soc > 0.2:
+                adjusted = min(adjusted, -0.65)
+            elif net_load < -0.15 and soc < 0.9:
+                adjusted = max(adjusted, 0.6)
 
         if tariff_band == "high" and soc > 0.22:
             adjusted = min(adjusted, -0.5)
@@ -323,6 +351,10 @@ class DQNAgent:
             action = actions[i] if i < len(actions) else 0.0
             p2p = abs(building.get("p2p_traded_kwh", 0.0))
             p2p_str = f" | P2P: {p2p:.2f} kWh traded" if p2p > 0 else ""
+            feeder_label = building.get("feeder_label", building.get("feeder_id", "local feeder"))
+            feeder_status = building.get("feeder_status", "nominal")
+            line_status = building.get("line_status", "nominal")
+            topology_adjustment = float(building.get("topology_reward_adjustment", 0.0))
 
             state = self._build_state(building, carbon, 0)
             with torch.no_grad():
@@ -333,6 +365,18 @@ class DQNAgent:
                 rationales.append(
                     f"PRE-COGNITION OVERRIDE - Stockpiling for {forecast_scenario}. "
                     f"SoC: {int(soc * 100)}%."
+                )
+            elif feeder_status == "outage" or line_status == "outage":
+                rationales.append(
+                    f"DQN -> RESILIENCE MODE - {feeder_label} is faulted or islanded. "
+                    f"Policy is clipped to support local continuity and reduce outage imports."
+                    f" Topology adj: {topology_adjustment:.3f}.{p2p_str}{q_str}"
+                )
+            elif feeder_status in {"warning", "critical", "overload"} or line_status in {"warning", "critical", "overload"}:
+                rationales.append(
+                    f"DQN -> FEEDER RELIEF - {feeder_label} is {feeder_status}. "
+                    f"Post-processing steers dispatch away from stressed branch loading."
+                    f" Topology adj: {topology_adjustment:.3f}.{p2p_str}{q_str}"
                 )
             elif tariff_band == "high" and action <= -0.5:
                 rationales.append(

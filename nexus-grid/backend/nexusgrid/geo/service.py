@@ -16,6 +16,7 @@ from urllib.request import Request, urlopen
 from nexusgrid.core.schema_loader import MAX_BUILDINGS, load_from_dict
 from nexusgrid.geo.catalog import featured_catalog_locations, search_catalog
 from nexusgrid.geo.enrichment import geo_enrichment_service
+from nexusgrid.ingestion import asset_ingestion_planner
 
 
 COORDINATE_PATTERN = re.compile(
@@ -427,6 +428,13 @@ class GeoTwinBuilder:
             sum(float(building.get("battery_max_rate_kw", 0.0)) for building in enriched.get("buildings", [])),
             1,
         )
+        asset_ingestion_plan = asset_ingestion_planner.build_plan(
+            query=location.display_name,
+            latitude=location.latitude,
+            longitude=location.longitude,
+            country_code=location.country_code,
+            district_type=district_type,
+        )
 
         enriched["atlas_context"] = {
             "phase": "2B",
@@ -443,9 +451,12 @@ class GeoTwinBuilder:
                 "generated_control_entities",
                 "topology_seed",
                 "provenance_panel",
+                "asset_ingestion_architecture",
             ],
+            "future_asset_scope": "radius_ingestion_ready",
         }
         enriched["control_entities"] = control_entities
+        enriched["asset_ingestion_plan"] = asset_ingestion_plan
         enriched["twin_summary"] = {
             "phase": "2B",
             "location_label": location.display_name,
@@ -459,6 +470,7 @@ class GeoTwinBuilder:
             "storage_capacity_kwh": total_storage,
             "dispatch_capacity_kw": total_dispatch,
             "rl_agent_scope": sorted({entity["agent_class"] for entity in control_entities}),
+            "future_asset_radius_km": asset_ingestion_plan["radius_km"],
         }
         enriched["twin_provenance"] = {
             "geography": {
@@ -490,12 +502,18 @@ class GeoTwinBuilder:
                     "source": "feeder-and-asset-clustering",
                     "confidence": 0.76,
                 },
+                {
+                    "layer": "asset_ingestion_plan",
+                    "source": "provider-agnostic-radius-architecture",
+                    "confidence": 0.92,
+                },
             ],
             "editable_assumptions": [
                 "district_type",
                 "building_archetype_mix",
                 "control_entity_clustering",
                 "topology_seed",
+                "asset_ingestion_radius",
             ],
         }
         return enriched
@@ -690,6 +708,9 @@ class GeoService:
     def list_enrichment_providers(self) -> Dict[str, List[Dict[str, Any]]]:
         return geo_enrichment_service.list_providers()
 
+    def list_asset_ingestion_providers(self) -> List[Dict[str, Any]]:
+        return asset_ingestion_planner.list_providers()
+
     def list_featured_locations(self, limit: int = 8) -> List[Dict[str, Any]]:
         featured: List[Dict[str, Any]] = []
         for item in featured_catalog_locations(limit=limit):
@@ -811,6 +832,7 @@ class GeoService:
             "control_entities": schema.get("control_entities", []),
             "atlas_context": schema.get("atlas_context", {}),
             "twin_provenance": schema.get("twin_provenance", {}),
+            "asset_ingestion_plan": schema.get("asset_ingestion_plan", {}),
         }
 
     def enrich_existing_schema(
@@ -850,6 +872,7 @@ class GeoService:
             "control_entities": enriched_schema.get("control_entities", []),
             "atlas_context": enriched_schema.get("atlas_context", {}),
             "twin_provenance": enriched_schema.get("twin_provenance", {}),
+            "asset_ingestion_plan": enriched_schema.get("asset_ingestion_plan", {}),
         }
 
     def enrich_location(

@@ -175,6 +175,13 @@ class GeoEnrichmentPayload(BaseModel):
     tariff_provider: str = "auto"
 
 
+class GeoAssetPlanPayload(BaseModel):
+    query: str
+    provider: str = "auto"
+    district_type: str = "auto"
+    radius_km: int = 50
+
+
 @app.post("/api/validate", tags=["Schema"])
 def validate_schema(payload: SchemaPayload):
     try:
@@ -209,6 +216,7 @@ def get_geo_providers():
         "providers": geo_service.list_providers(),
         "featured_locations": geo_service.list_featured_locations(),
         "enrichment_providers": geo_service.list_enrichment_providers(),
+        "asset_ingestion_providers": geo_service.list_asset_ingestion_providers(),
         "district_types": ["auto", *DISTRICT_LABELS.keys()],
         "phase": "2B",
         "recommended_live_apis": [
@@ -255,6 +263,35 @@ def enrich_geo_location(payload: GeoEnrichmentPayload):
         result["phase"] = "2B"
         return result
     except (GeoResolutionError, GeoEnrichmentError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.post("/api/geo/asset-plan", tags=["Geo"])
+def get_geo_asset_plan(payload: GeoAssetPlanPayload):
+    try:
+        resolved = geo_service.resolve(
+            query=payload.query,
+            provider=payload.provider,
+            limit=1,
+        )
+        location = resolved["candidates"][0]
+        generated = geo_service.generate_schema(
+            query=payload.query,
+            provider=payload.provider,
+            district_type=payload.district_type,
+            include_enrichment=False,
+        )
+        plan = dict(generated.get("asset_ingestion_plan", {}))
+        plan["radius_km"] = max(5, min(payload.radius_km, 150))
+        plan["location"] = location
+        return {
+            **_engine_descriptor(),
+            "phase": "2C-architecture",
+            "query": payload.query,
+            "provider": resolved["provider"],
+            "asset_ingestion_plan": plan,
+        }
+    except (GeoResolutionError, GeoEnrichmentError, IndexError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
 
@@ -340,6 +377,7 @@ async def ws_simulate(
             "grid_wholesale_price_unit": grid_signal_spine.get("day_ahead_price_unit"),
             "topology_summary": runner.topology_summary,
             "topology_runtime": runner.env.topology_runtime,
+            "topology_control_signal": runner.env.topology_control_signal,
             "geo_context": runner.env.geo_context,
             "twin_summary": runner.env.twin_summary,
             "atlas_context": runner.env.atlas_context,

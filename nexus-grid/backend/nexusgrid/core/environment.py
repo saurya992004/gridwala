@@ -25,6 +25,7 @@ TOTAL_STEPS = HOURS_PER_DAY * DAYS_PER_YEAR
 ENGINE_NAME = "nexus-sandbox-engine"
 ENGINE_VERSION = "1.0.0"
 ENGINE_MODE = "sandbox"
+TOPOLOGY_STRESSED_STATUSES = {"warning", "critical", "overload", "outage"}
 
 
 def _solar_curve(hour: int, day_of_year: int) -> float:
@@ -401,17 +402,23 @@ class NexusGridEnv:
                     4,
                 )
 
+        topology_runtime = self._compute_topology_runtime(buildings_data)
+        self._annotate_building_topology_context(buildings_data, topology_runtime)
+
         for data in buildings_data:
+            topology_adjustment = self._topology_reward_adjustment(data)
             data["reward"] = round(
                 data["reward"]
                 + (data["nexus_tokens_earned"] * 0.12)
                 - (max(data["grid_exchanged_kwh"], 0.0) * carbon_intensity * 0.18),
                 4,
             )
+            data["reward"] = round(data["reward"] + topology_adjustment, 4)
             data["grid_tariff_rate"] = round(grid_buy_price, 4)
             data["grid_tariff_window"] = runtime_context["tariff_window"]
             data["grid_tariff_currency"] = runtime_context["tariff_currency"]
             data["grid_tariff_band"] = runtime_context["tariff_band"]
+            data["topology_reward_adjustment"] = topology_adjustment
 
         for building, data in zip(self._buildings, buildings_data):
             building.log_step(data)
@@ -430,7 +437,7 @@ class NexusGridEnv:
                 self.clear_emergency()
 
         district_net = round(sum(b["net_electricity_consumption"] for b in buildings_data), 4)
-        self._topology_runtime = self._compute_topology_runtime(buildings_data)
+        self._topology_runtime = topology_runtime
 
         payload = {
             "step": self._step_count,
@@ -471,6 +478,7 @@ class NexusGridEnv:
             "grid_wholesale_price": self._grid_signal_spine.get("day_ahead_price"),
             "grid_wholesale_price_unit": self._grid_signal_spine.get("day_ahead_price_unit"),
             "topology_summary": self._topology_summary,
+            "topology_control_signal": self._build_topology_control_signal(topology_runtime),
             "geo_context": self._geo_context,
             "twin_summary": self._twin_summary,
             "atlas_context": self._atlas_context,
@@ -616,10 +624,12 @@ class NexusGridEnv:
 
     @property
     def seed_buildings(self) -> List[Dict[str, Any]]:
+        building_to_feeder = self._topology_runtime_context.get("building_to_feeder", {})
         return [
             {
                 "id": building.id,
                 "bus_id": building.bus_id,
+                "feeder_id": str(building_to_feeder.get(building.id, "unassigned_feeder")),
                 "type": building.type,
                 "is_ev_away": False,
                 "net_electricity_consumption": 0.0,
@@ -630,6 +640,11 @@ class NexusGridEnv:
                 "grid_exchanged_kwh": 0.0,
                 "nexus_tokens_earned": 0.0,
                 "nexus_wallet": 0.0,
+                "feeder_status": "nominal",
+                "line_status": "nominal",
+                "topology_stress_index": 0.0,
+                "topology_stressed": False,
+                "topology_event_targeted": False,
             }
             for building in self._buildings
         ]
@@ -705,6 +720,119 @@ class NexusGridEnv:
     @property
     def topology_runtime(self) -> Dict[str, Any]:
         return self._topology_runtime
+
+    @property
+    def topology_control_signal(self) -> Dict[str, Any]:
+        return self._build_topology_control_signal(self._topology_runtime)
+
+    def _annotate_building_topology_context(
+        self,
+        buildings_data: List[Dict[str, Any]],
+        topology_runtime: Dict[str, Any],
+    ) -> None:
+        feeder_states = {
+            str(item.get("feeder_id", "")): item
+            for item in topology_runtime.get("feeder_states", [])
+        }
+        line_states = {
+            str(item.get("line_id", "")): item
+            for item in topology_runtime.get("line_states", [])
+        }
+        building_to_feeder = self._topology_runtime_context.get("building_to_feeder", {})
+        asset_line_by_building = self._topology_runtime_context.get("asset_line_by_building", {})
+        event_targets = {
+            str(event.get("target", ""))
+            for event in topology_runtime.get("active_events", [])
+        }
+
+        for data in buildings_data:
+            building_id = str(data.get("id", ""))
+            feeder_id = str(building_to_feeder.get(building_id, "unassigned_feeder"))
+            line_id = str(asset_line_by_building.get(building_id, ""))
+            feeder_state = feeder_states.get(feeder_id, {})
+            line_state = line_states.get(line_id, {})
+            feeder_status = str(feeder_state.get("status", "nominal"))
+            line_status = str(line_state.get("status", "nominal"))
+
+            data["feeder_id"] = feeder_id
+            data["feeder_label"] = str(feeder_state.get("label", feeder_id.replace("_", " ").title()))
+            data["feeder_status"] = feeder_status
+            data["feeder_loading_pct"] = float(feeder_state.get("loading_pct", 0.0) or 0.0)
+            data["feeder_headroom_kw"] = feeder_state.get("headroom_kw")
+            data["line_id"] = line_id
+            data["line_status"] = line_status
+            data["line_loading_pct"] = float(line_state.get("loading_pct", 0.0) or 0.0)
+            data["topology_stress_index"] = float(topology_runtime.get("system_stress_index", 0.0) or 0.0)
+            data["topology_stressed"] = (
+                feeder_status in TOPOLOGY_STRESSED_STATUSES
+                or line_status in TOPOLOGY_STRESSED_STATUSES
+            )
+            data["topology_event_targeted"] = feeder_id in event_targets or line_id in event_targets
+
+    def _topology_reward_adjustment(self, building_data: Dict[str, Any]) -> float:
+        feeder_status = str(building_data.get("feeder_status", "nominal"))
+        line_status = str(building_data.get("line_status", "nominal"))
+        stress_index = _safe_float(building_data.get("topology_stress_index"), 0.0)
+        grid_exchange = _safe_float(building_data.get("grid_exchanged_kwh"), 0.0)
+        p2p_traded = abs(_safe_float(building_data.get("p2p_traded_kwh"), 0.0))
+
+        severity = self._topology_severity(feeder_status, line_status)
+        if severity <= 0.0:
+            return 0.0
+
+        grid_dependency_penalty = abs(grid_exchange) * severity * (0.08 + (stress_index * 0.16))
+        outage_import_penalty = (
+            max(grid_exchange, 0.0) * 0.45
+            if feeder_status == "outage" or line_status == "outage"
+            else 0.0
+        )
+        local_relief_credit = p2p_traded * severity * 0.05
+        return round(local_relief_credit - grid_dependency_penalty - outage_import_penalty, 4)
+
+    def _topology_severity(self, feeder_status: str, line_status: str) -> float:
+        status = "nominal"
+        for candidate in (feeder_status, line_status):
+            if candidate == "outage":
+                status = "outage"
+                break
+            if candidate == "overload" and status != "outage":
+                status = "overload"
+            elif candidate == "critical" and status not in {"outage", "overload"}:
+                status = "critical"
+            elif candidate == "warning" and status == "nominal":
+                status = "warning"
+
+        if status == "outage":
+            return 1.0
+        if status == "overload":
+            return 0.8
+        if status == "critical":
+            return 0.55
+        if status == "warning":
+            return 0.3
+        return 0.0
+
+    def _build_topology_control_signal(self, topology_runtime: Dict[str, Any]) -> Dict[str, Any]:
+        active_events = topology_runtime.get("active_events", [])
+        primary_event = active_events[0] if active_events else None
+        constrained_feeder_ids = [
+            str(feeder.get("feeder_id", ""))
+            for feeder in topology_runtime.get("feeder_states", [])
+            if str(feeder.get("status", "nominal")) in TOPOLOGY_STRESSED_STATUSES
+        ]
+
+        return {
+            "system_stress_index": topology_runtime.get("system_stress_index", 0.0),
+            "constrained_feeders": topology_runtime.get("constrained_feeders", 0),
+            "overloaded_lines": topology_runtime.get("overloaded_lines", 0),
+            "primary_event": primary_event,
+            "constrained_feeder_ids": constrained_feeder_ids,
+            "controller_posture": (
+                "resilience_priority"
+                if constrained_feeder_ids or primary_event
+                else "economic_optimization"
+            ),
+        }
 
     def _compute_topology_runtime(self, buildings_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         return evaluate_topology_runtime(

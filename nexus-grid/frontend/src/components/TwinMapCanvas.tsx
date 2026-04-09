@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl, {
   GeoJSONSource,
   LngLatLike,
@@ -301,6 +301,8 @@ export default function TwinMapCanvas({
     () => buildTwinFeatures(center, buildings, controlEntities, topologyRuntime),
     [center, buildings, controlEntities, topologyRuntime],
   );
+  const [initialCenter] = useState(center);
+  const [initialFeatures] = useState(twinFeatures);
   const activeEvents = topologyRuntime?.active_events || [];
   const feederStressCount = topologyRuntime?.constrained_feeders || 0;
 
@@ -319,7 +321,7 @@ export default function TwinMapCanvas({
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
       style,
-      center: center as LngLatLike,
+      center: initialCenter as LngLatLike,
       zoom: 10.8,
       pitch: 48,
       bearing: 12,
@@ -329,10 +331,10 @@ export default function TwinMapCanvas({
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
     map.on("load", () => {
-      map.addSource("twin-center", { type: "geojson", data: twinFeatures.center });
-      map.addSource("twin-assets", { type: "geojson", data: twinFeatures.assets });
-      map.addSource("twin-feeder-heads", { type: "geojson", data: twinFeatures.feederHeads });
-      map.addSource("twin-lines", { type: "geojson", data: twinFeatures.lines });
+      map.addSource("twin-center", { type: "geojson", data: initialFeatures.center });
+      map.addSource("twin-assets", { type: "geojson", data: initialFeatures.assets });
+      map.addSource("twin-feeder-heads", { type: "geojson", data: initialFeatures.feederHeads });
+      map.addSource("twin-lines", { type: "geojson", data: initialFeatures.lines });
 
       map.addLayer({
         id: "twin-lines-main",
@@ -416,13 +418,13 @@ export default function TwinMapCanvas({
     });
 
     mapRef.current = map;
-    previousCenterRef.current = center;
+    previousCenterRef.current = initialCenter;
 
     return () => {
       map.remove();
       mapRef.current = null;
     };
-  }, [center, twinFeatures]);
+  }, [initialCenter, initialFeatures]);
 
   useEffect(() => {
     const map = mapRef.current;

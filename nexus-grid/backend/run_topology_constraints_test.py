@@ -6,6 +6,7 @@ Usage: python run_topology_constraints_test.py
 
 from pathlib import Path
 
+from nexusgrid.core.agent import RuleBasedAgent
 from nexusgrid.core.environment import NexusGridEnv
 from nexusgrid.core.schema_loader import load_from_file
 
@@ -52,6 +53,8 @@ def run_topology_constraints_smoke_test():
     faulted_runtime = faulted["topology_runtime"]
     assert faulted_runtime["constrained_feeders"] >= 1, "Expected at least one constrained feeder during a feeder fault."
     assert any(line["status"] == "outage" for line in faulted_runtime["line_states"]), "Expected an outage line state."
+    assert any(building["topology_stressed"] for building in faulted["buildings"]), "Expected stressed building annotations."
+    assert faulted["topology_control_signal"]["controller_posture"] == "resilience_priority"
     print(
         f"      [OK] Constrained feeders: {faulted_runtime['constrained_feeders']} "
         f"| Active event: {faulted_runtime['active_events'][0]['target']}"
@@ -65,6 +68,16 @@ def run_topology_constraints_smoke_test():
     congested_runtime = congested["topology_runtime"]
     assert congested_runtime["system_stress_index"] > baseline_runtime["system_stress_index"]
     assert congested_runtime["constrained_feeders"] >= 1, "Expected constrained feeders during congestion wave."
+    rule_agent = RuleBasedAgent()
+    congestion_actions = rule_agent.decide(
+        buildings=congested["buildings"],
+        carbon_intensity=congested["carbon_intensity"],
+        forecast_scenario=congested.get("forecast_scenario"),
+        tariff_rate=congested.get("grid_tariff_rate"),
+        tariff_band=congested.get("grid_tariff_band"),
+        weather_outlook=congested.get("weather_outlook"),
+    )
+    assert any(action < 0 for action in congestion_actions), "Expected feeder-stress-aware discharge actions."
     print(
         f"      [OK] Stress index rose to {congested_runtime['system_stress_index']} "
         f"with {congested_runtime['constrained_feeders']} constrained feeders."

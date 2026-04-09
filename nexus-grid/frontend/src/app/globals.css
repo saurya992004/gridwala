@@ -34,7 +34,7 @@ body {
   color: var(--text-primary);
   font-family: var(--font-sans);
   min-height: 100vh;
-  overflow: hidden; /* Hide main scroll for dashboard app feel */
+  overflow: hidden;
 }
 
 /* 
@@ -324,17 +324,23 @@ h1, h2, h3, h4, h5, h6 {
   background: rgba(59, 130, 246, 0.08);
 }
 
+.chip-button.active {
+  border-color: rgba(59, 130, 246, 0.42);
+  background: rgba(59, 130, 246, 0.16);
+  box-shadow: 0 0 18px rgba(59, 130, 246, 0.18);
+}
+
 .terminal-nav {
-  padding-bottom: 16px;
+  padding-bottom: 12px;
 }
 
 .terminal-shell {
   height: calc(100vh - 96px);
   display: grid;
-  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr) minmax(320px, 380px);
+  grid-template-columns: minmax(280px, 330px) minmax(0, 1.18fr) minmax(300px, 350px);
   grid-template-rows: minmax(0, 1fr) auto;
-  gap: 20px;
-  padding: 0 24px 24px 24px;
+  gap: 16px;
+  padding: 0 20px 20px 20px;
   position: relative;
   z-index: 10;
 }
@@ -343,20 +349,21 @@ h1, h2, h3, h4, h5, h6 {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .map-stage-panel {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .map-stage-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 18px;
+  gap: 14px;
   flex-wrap: wrap;
   padding: 4px 4px 0 4px;
 }
@@ -376,10 +383,10 @@ h1, h2, h3, h4, h5, h6 {
 
 .map-stage-copy {
   max-width: 760px;
-  margin-top: 8px;
+  margin-top: 6px;
   color: var(--text-secondary);
   line-height: 1.55;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
 }
 
 .map-stage-actions {
@@ -481,6 +488,7 @@ h1, h2, h3, h4, h5, h6 {
   flex-direction: column;
   padding: 14px;
   gap: 14px;
+  overflow: hidden;
 }
 
 .rail-header {
@@ -538,8 +546,9 @@ h1, h2, h3, h4, h5, h6 {
 .rail-content {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
   display: flex;
+  padding-right: 2px;
 }
 
 .rail-content > * {
@@ -558,7 +567,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .terminal-dock {
   grid-column: 1 / -1;
-  padding: 14px;
+  padding: 12px;
 }
 
 .signal-dock {
@@ -572,10 +581,10 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.04);
-  min-height: 126px;
+  min-height: 112px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .signal-tile-header {
@@ -638,7 +647,7 @@ h1, h2, h3, h4, h5, h6 {
   }
 
   .map-stage-frame {
-    min-height: 560px;
+    min-height: 620px;
   }
 
   .signal-dock {
