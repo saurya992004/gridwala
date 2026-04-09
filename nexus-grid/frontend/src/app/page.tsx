@@ -127,6 +127,7 @@ export default function Home() {
     data?.geo_context?.city || data?.geo_context?.locality || "Global twin";
   const twinModeLabel =
     data?.atlas_context?.mode === "city_to_twin" ? "CITY TWIN LIVE" : "SANDBOX DISTRICT";
+  const controlPosture = data?.topology_control_signal?.controller_posture;
 
   const renderIntelView = () => {
     if (intelView === "trace") {
@@ -146,6 +147,7 @@ export default function Home() {
       return (
         <TopologyStressPanel
           topologyRuntime={data?.topology_runtime}
+          topologyControlSignal={data?.topology_control_signal}
           controlEntities={data?.control_entities || []}
         />
       );
@@ -225,6 +227,26 @@ export default function Home() {
             >
               <Cpu size={12} />
               {data.engine_mode.toUpperCase()}
+            </div>
+          )}
+
+          {controlPosture && (
+            <div
+              className="status-badge"
+              style={{
+                color:
+                  controlPosture === "resilience_priority"
+                    ? "var(--neon-red)"
+                    : "var(--neon-green)",
+                background:
+                  controlPosture === "resilience_priority"
+                    ? "rgba(239, 68, 68, 0.12)"
+                    : "rgba(16, 185, 129, 0.12)",
+                boxShadow: "none",
+              }}
+            >
+              <AlertCircle size={12} />
+              {controlPosture.replaceAll("_", " ").toUpperCase()}
             </div>
           )}
 

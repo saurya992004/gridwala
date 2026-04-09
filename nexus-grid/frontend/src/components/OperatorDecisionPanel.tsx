@@ -2,6 +2,12 @@ import { AlertCircle, ArrowRight, Brain, CloudLightning, Gauge, Zap } from "luci
 import { SimulationPayload } from "@/hooks/useSimulationWebSocket";
 
 
+function postureLabel(posture?: string) {
+  if (posture === "resilience_priority") return "RESILIENCE";
+  if (posture === "economic_optimization") return "ECONOMIC";
+  return "STANDBY";
+}
+
 function derivePriority(payload: SimulationPayload | null) {
   if (!payload) {
     return {
@@ -18,6 +24,19 @@ function derivePriority(payload: SimulationPayload | null) {
       detail: `The system is staging an intervention in ${payload.forecast_steps_left || 0} steps.`,
       tone: "rgba(120, 53, 15, 0.35)",
       icon: <AlertCircle size={16} color="var(--neon-amber)" />,
+    };
+  }
+
+  if (payload.topology_control_signal?.controller_posture === "resilience_priority") {
+    const primaryEvent = payload.topology_control_signal.primary_event;
+    const constrainedCount = payload.topology_control_signal.constrained_feeders || 0;
+    return {
+      title: primaryEvent?.label || "Resilience posture active",
+      detail:
+        primaryEvent?.summary ||
+        `${constrainedCount} constrained feeders detected. The controller is prioritizing feeder relief and local continuity over pure market optimization.`,
+      tone: "rgba(127, 29, 29, 0.35)",
+      icon: <AlertCircle size={16} color="var(--neon-red)" />,
     };
   }
 
@@ -96,6 +115,9 @@ function derivePriority(payload: SimulationPayload | null) {
 export default function OperatorDecisionPanel({ payload }: { payload: SimulationPayload | null }) {
   const decisions = payload?.rationales?.slice(0, 4) || [];
   const priority = derivePriority(payload);
+  const topologySignal = payload?.topology_control_signal;
+  const constrainedFeeders = topologySignal?.constrained_feeder_ids || [];
+  const primaryEvent = topologySignal?.primary_event;
 
   return (
     <div
@@ -147,7 +169,7 @@ export default function OperatorDecisionPanel({ payload }: { payload: Simulation
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "12px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "12px" }}>
         <div className="metric-card" style={{ background: "rgba(2, 6, 23, 0.32)" }}>
           <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.1em" }}>
             Policy
@@ -164,7 +186,48 @@ export default function OperatorDecisionPanel({ payload }: { payload: Simulation
             {payload?.operating_context_mode?.replaceAll("_", " ").toUpperCase() || "STATIC"}
           </div>
         </div>
+        <div className="metric-card" style={{ background: "rgba(2, 6, 23, 0.32)" }}>
+          <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+            Posture
+          </div>
+          <div style={{ marginTop: "8px", fontFamily: "var(--font-display)", fontSize: "1.2rem" }}>
+            {postureLabel(topologySignal?.controller_posture)}
+          </div>
+        </div>
       </div>
+
+      {(primaryEvent || constrainedFeeders.length > 0) && (
+        <div
+          style={{
+            padding: "14px 16px",
+            borderRadius: "16px",
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.06)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px",
+          }}
+        >
+          <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.14em" }}>
+            Constraint Focus
+          </div>
+          {primaryEvent && (
+            <div style={{ fontWeight: 700 }}>
+              {primaryEvent.label}
+            </div>
+          )}
+          <div style={{ color: "var(--text-secondary)", fontSize: "0.9rem", lineHeight: 1.5 }}>
+            {primaryEvent?.summary ||
+              "The controller is clipping market behavior to protect stressed feeders and preserve local continuity."}
+          </div>
+          {constrainedFeeders.length > 0 && (
+            <div style={{ color: "var(--text-secondary)", fontSize: "0.84rem" }}>
+              Target feeders: {constrainedFeeders.slice(0, 3).join(", ")}
+              {constrainedFeeders.length > 3 ? ` +${constrainedFeeders.length - 3} more` : ""}
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
         <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.14em" }}>

@@ -2,6 +2,7 @@ import { AlertTriangle, Cpu, Gauge, ShieldAlert, Waves } from "lucide-react";
 import {
   ControlEntity,
   FeederState,
+  TopologyControlSignal,
   TopologyEvent,
   TopologyRuntime,
 } from "@/hooks/useSimulationWebSocket";
@@ -144,14 +145,18 @@ function feederCard(feeder: FeederState) {
 
 export default function TopologyStressPanel({
   topologyRuntime,
+  topologyControlSignal,
   controlEntities,
 }: {
   topologyRuntime?: TopologyRuntime;
+  topologyControlSignal?: TopologyControlSignal;
   controlEntities: ControlEntity[];
 }) {
   const events = topologyRuntime?.active_events || [];
   const feeders = topologyRuntime?.feeder_states || [];
   const criticalEntities = controlEntities.slice(0, 4);
+  const posture = topologyControlSignal?.controller_posture?.replaceAll("_", " ").toUpperCase();
+  const primaryEvent = topologyControlSignal?.primary_event;
 
   return (
     <div
@@ -203,6 +208,34 @@ export default function TopologyStressPanel({
           </div>
         </div>
       </div>
+
+      {posture && (
+        <div
+          style={{
+            padding: "12px 14px",
+            borderRadius: "16px",
+            border: "1px solid rgba(255,255,255,0.08)",
+            background:
+              topologyControlSignal?.controller_posture === "resilience_priority"
+                ? "rgba(127, 29, 29, 0.22)"
+                : "rgba(8, 47, 73, 0.22)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "6px",
+          }}
+        >
+          <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+            Control Posture
+          </div>
+          <div style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}>
+            {posture}
+          </div>
+          <div style={{ color: "var(--text-secondary)", fontSize: "0.84rem", lineHeight: 1.45 }}>
+            {primaryEvent?.summary ||
+              "The controller posture shifts between economic optimization and feeder-resilience protection based on live topology stress."}
+          </div>
+        </div>
+      )}
 
       {events.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>

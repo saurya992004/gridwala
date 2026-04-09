@@ -51,6 +51,9 @@ function dockTile(
 
 export default function SignalDock({ payload }: { payload: SimulationPayload | null }) {
   const activeTopologyEvent = payload?.topology_runtime?.active_events?.[0];
+  const controlPosture = payload?.topology_control_signal?.controller_posture
+    ?.replaceAll("_", " ")
+    .toUpperCase();
 
   return (
     <div className="signal-dock">
@@ -59,7 +62,7 @@ export default function SignalDock({ payload }: { payload: SimulationPayload | n
         "Net load",
         metricValue(payload?.district_net_consumption, 2, "kW"),
         typeof payload?.grid_total_load_mw === "number"
-          ? `${payload.electricity_maps_zone || "zone"} · ${compactPower(payload.grid_total_load_mw)}`
+          ? `${payload.electricity_maps_zone || "zone"} / ${compactPower(payload.grid_total_load_mw)}`
           : payload?.controller_mode
             ? `${payload.controller_mode.toUpperCase()} controller`
             : "Awaiting controller state",
@@ -70,7 +73,7 @@ export default function SignalDock({ payload }: { payload: SimulationPayload | n
         "Intensity",
         metricValue(payload?.carbon_intensity, 3, "kgCO2/kWh"),
         payload?.grid_renewable_share_pct !== undefined
-          ? `${payload.electricity_maps_zone || "zone"} · ${payload.grid_renewable_share_pct.toFixed(0)}% renewable${payload.grid_signal_estimated ? " · estimated" : ""}`
+          ? `${payload.electricity_maps_zone || "zone"} / ${payload.grid_renewable_share_pct.toFixed(0)}% renewable${payload.grid_signal_estimated ? " / estimated" : ""}`
           : payload?.operating_context_live
             ? "Live-enriched signal"
             : "Static or heuristic signal",
@@ -81,7 +84,7 @@ export default function SignalDock({ payload }: { payload: SimulationPayload | n
         "Tariff",
         metricValue(payload?.grid_tariff_rate, 3, payload?.grid_tariff_currency || "USD"),
         typeof payload?.grid_wholesale_price === "number"
-          ? `${payload?.grid_tariff_window || "utility schedule"} · wholesale ${compactMarket(payload.grid_wholesale_price, payload.grid_wholesale_price_unit)}`
+          ? `${payload?.grid_tariff_window || "utility schedule"} / wholesale ${compactMarket(payload.grid_wholesale_price, payload.grid_wholesale_price_unit)}`
           : payload?.grid_tariff_window || "utility schedule pending",
         <Coins size={16} color="var(--neon-amber)" />,
       )}
@@ -90,17 +93,19 @@ export default function SignalDock({ payload }: { payload: SimulationPayload | n
         "Topology",
         `${payload?.topology_summary?.n_feeders || 0} feeders`,
         typeof payload?.topology_runtime?.constrained_feeders === "number" && payload.topology_runtime.constrained_feeders > 0
-          ? `${payload.topology_runtime.constrained_feeders} constrained · ${payload.topology_runtime.overloaded_lines || 0} overloaded`
-          : `${payload?.topology_summary?.n_buses || 0} buses · ${payload?.topology_summary?.n_lines || 0} lines`,
+          ? `${payload.topology_runtime.constrained_feeders} constrained / ${payload.topology_runtime.overloaded_lines || 0} overloaded`
+          : `${payload?.topology_summary?.n_buses || 0} buses / ${payload?.topology_summary?.n_lines || 0} lines`,
         <Radar size={16} color="var(--neon-purple)" />,
       )}
       {dockTile(
         "Control",
         "Agents",
         `${payload?.control_entities?.length || 0}`,
-        payload?.twin_summary?.dominant_asset_type
-          ? `${payload.twin_summary.dominant_asset_type} dominated`
-          : "control entities pending",
+        controlPosture
+          ? `${controlPosture} posture`
+          : payload?.twin_summary?.dominant_asset_type
+            ? `${payload.twin_summary.dominant_asset_type} dominated`
+            : "control entities pending",
         <Cpu size={16} color="var(--neon-blue)" />,
       )}
       {dockTile(

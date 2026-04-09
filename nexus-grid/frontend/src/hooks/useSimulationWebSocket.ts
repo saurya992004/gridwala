@@ -3,6 +3,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 export interface BuildingState {
   id: string;
   bus_id?: string;
+  feeder_id?: string;
+  feeder_label?: string;
   type: string;
   is_ev_away: boolean;
   net_electricity_consumption: number;
@@ -13,6 +15,16 @@ export interface BuildingState {
   grid_exchanged_kwh?: number;
   nexus_tokens_earned?: number;
   nexus_wallet?: number;
+  feeder_status?: string;
+  feeder_loading_pct?: number;
+  feeder_headroom_kw?: number | null;
+  line_id?: string;
+  line_status?: string;
+  line_loading_pct?: number;
+  topology_stress_index?: number;
+  topology_stressed?: boolean;
+  topology_event_targeted?: boolean;
+  topology_reward_adjustment?: number;
 }
 
 export interface GeoContext {
@@ -85,6 +97,15 @@ export interface TopologyRuntime {
   feeder_states?: FeederState[];
   line_states?: TopologyLineState[];
   active_events?: TopologyEvent[];
+}
+
+export interface TopologyControlSignal {
+  system_stress_index?: number;
+  constrained_feeders?: number;
+  overloaded_lines?: number;
+  primary_event?: TopologyEvent;
+  constrained_feeder_ids?: string[];
+  controller_posture?: string;
 }
 
 export interface ControlEntity {
@@ -210,6 +231,7 @@ export interface SimulationPayload {
   weather_outlook?: string;
   topology_summary?: TopologySummary;
   topology_runtime?: TopologyRuntime;
+  topology_control_signal?: TopologyControlSignal;
   geo_context?: GeoContext;
   twin_summary?: TwinSummary;
   atlas_context?: AtlasContext;

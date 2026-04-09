@@ -324,18 +324,20 @@ Goal:
 
 Status:
 
-- **partially complete**
+- **strong version complete locally**
 
 Delivered:
 
 - topology stress rail
 - map stress overlays
 - operator guidance reacting to topology events
+- dedicated `topology_control_signal` surfacing in the operator deck
+- controller posture badge in the top status rail
+- control posture summary in the bottom signal dock
+- posture visibility in the network rail
 
 Still missing:
 
-- dedicated UI for `topology_control_signal`
-- clearer controller posture and feeder relief storytelling
 - richer event playback and intervention narrative
 
 ### Phase 3D: Replay, Counterfactuals, and Mission-Control Storytelling
@@ -405,7 +407,7 @@ Will deliver:
 - Phase 2D foundation
 - Phase 3A foundation
 - Phase 3B local foundation
-- Phase 3C partial
+- Phase 3C strong local version
 
 ### Remaining Major Work
 
