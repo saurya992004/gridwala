@@ -24,12 +24,13 @@ function providerChip(label: string, value: string | undefined, accent: string) 
         borderRadius: "12px",
         border: "1px solid rgba(255,255,255,0.06)",
         background: "rgba(255,255,255,0.04)",
+        minWidth: 0,
       }}
     >
       <div style={{ color: "var(--text-muted)", fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
         {label}
       </div>
-      <div style={{ marginTop: "4px", color: accent, fontFamily: "var(--font-display)", fontWeight: 700 }}>
+      <div style={{ marginTop: "4px", color: accent, fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "0.98rem", lineHeight: 1.15, overflowWrap: "anywhere" }}>
         {value || "pending"}
       </div>
     </div>
@@ -48,7 +49,7 @@ export default function TwinProvenancePanel({
   const liveSignalSpine = twinProvenance?.live_signal_spine || {};
 
   return (
-    <div className="glass-panel" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+    <div className="glass-panel" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px", minWidth: 0, overflowY: "auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
         <div>
           <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", letterSpacing: "0.14em", textTransform: "uppercase" }}>
@@ -68,7 +69,7 @@ export default function TwinProvenancePanel({
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "12px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "12px" }}>
         <div className="metric-card">
           <div style={{ color: "var(--text-muted)", fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
             Geography
@@ -97,7 +98,7 @@ export default function TwinProvenancePanel({
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "10px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "10px" }}>
         {providerChip("Carbon", liveSignalSpine.carbon, "var(--neon-green)")}
         {providerChip("Weather", liveSignalSpine.weather, "var(--neon-cyan)")}
         {providerChip("Tariff", liveSignalSpine.tariff, "var(--neon-amber)")}
@@ -106,7 +107,7 @@ export default function TwinProvenancePanel({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
           gap: "12px",
         }}
       >

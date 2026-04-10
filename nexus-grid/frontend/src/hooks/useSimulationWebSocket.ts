@@ -480,6 +480,14 @@ export function useSimulationWebSocket(presetId: string = "residential_district"
   const triggerEmergency = useCallback((scenario: string) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: "emergency", scenario }));
+      setData((previous) =>
+        previous
+          ? {
+              ...previous,
+              emergency: scenario,
+            }
+          : previous,
+      );
     }
   }, []);
 
@@ -492,6 +500,20 @@ export function useSimulationWebSocket(presetId: string = "residential_district"
   const clearEmergency = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: "clear_emergency" }));
+      setData((previous) =>
+        previous
+          ? {
+              ...previous,
+              emergency: null,
+              topology_runtime: previous.topology_runtime
+                ? {
+                    ...previous.topology_runtime,
+                    active_events: [],
+                  }
+                : previous.topology_runtime,
+            }
+          : previous,
+      );
     }
   }, []);
 

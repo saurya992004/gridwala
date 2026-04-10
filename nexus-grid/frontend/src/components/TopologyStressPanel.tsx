@@ -146,10 +146,12 @@ function feederCard(feeder: FeederState) {
 export default function TopologyStressPanel({
   topologyRuntime,
   topologyControlSignal,
+  activeScenario,
   controlEntities,
 }: {
   topologyRuntime?: TopologyRuntime;
   topologyControlSignal?: TopologyControlSignal;
+  activeScenario?: string | null;
   controlEntities: ControlEntity[];
 }) {
   const events = topologyRuntime?.active_events || [];
@@ -157,6 +159,7 @@ export default function TopologyStressPanel({
   const criticalEntities = controlEntities.slice(0, 4);
   const posture = topologyControlSignal?.controller_posture?.replaceAll("_", " ").toUpperCase();
   const primaryEvent = topologyControlSignal?.primary_event;
+  const isPendingEmergency = Boolean(activeScenario && events.length === 0);
 
   return (
     <div
@@ -167,6 +170,7 @@ export default function TopologyStressPanel({
         flexDirection: "column",
         gap: "16px",
         overflowY: "auto",
+        minWidth: 0,
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
@@ -188,7 +192,7 @@ export default function TopologyStressPanel({
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "10px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(96px, 1fr))", gap: "10px" }}>
         <div className="metric-card" style={{ padding: "12px" }}>
           <div style={{ color: "var(--text-muted)", fontSize: "0.66rem", textTransform: "uppercase" }}>Stress Index</div>
           <div style={{ marginTop: "4px", fontFamily: "var(--font-display)", fontWeight: 700 }}>
@@ -246,12 +250,40 @@ export default function TopologyStressPanel({
         </div>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      {isPendingEmergency && (
+        <div
+          style={{
+            padding: "12px 14px",
+            borderRadius: "16px",
+            border: "1px solid rgba(245, 158, 11, 0.22)",
+            background: "rgba(245, 158, 11, 0.1)",
+            color: "#fde68a",
+            display: "flex",
+            gap: "10px",
+            alignItems: "flex-start",
+            lineHeight: 1.45,
+          }}
+        >
+          <AlertTriangle size={16} style={{ marginTop: "2px", flexShrink: 0 }} />
+          <div>
+            <div style={{ fontWeight: 700 }}>Emergency command is armed</div>
+            <div style={{ color: "var(--text-secondary)", fontSize: "0.84rem", marginTop: "4px" }}>
+              The runtime has not acknowledged the event yet. If the simulation is paused, press Resume. If this does not clear quickly, use Clear Emergency and inject it again.
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px", minWidth: 0 }}>
         <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", letterSpacing: "0.14em", textTransform: "uppercase" }}>
           Feeder States
         </div>
         {feeders.length ? feeders.map(feederCard) : (
-          <div style={{ color: "var(--text-secondary)" }}>Feeder runtime metrics will appear after the simulation starts.</div>
+          <div style={{ color: "var(--text-secondary)", lineHeight: 1.45 }}>
+            {isPendingEmergency
+              ? "Waiting for backend feeder metrics to acknowledge the injected event."
+              : "Feeder runtime metrics will appear after the simulation starts."}
+          </div>
         )}
       </div>
 

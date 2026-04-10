@@ -128,6 +128,8 @@ export default function OperatorDecisionPanel({ payload }: { payload: Simulation
         gap: "16px",
         padding: "20px",
         minHeight: "360px",
+        minWidth: 0,
+        overflowY: "auto",
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -169,12 +171,12 @@ export default function OperatorDecisionPanel({ payload }: { payload: Simulation
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "12px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(96px, 1fr))", gap: "12px" }}>
         <div className="metric-card" style={{ background: "rgba(2, 6, 23, 0.32)" }}>
           <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.1em" }}>
             Policy
           </div>
-          <div style={{ marginTop: "8px", fontFamily: "var(--font-display)", fontSize: "1.2rem" }}>
+          <div style={{ marginTop: "8px", fontFamily: "var(--font-display)", fontSize: "1.08rem", lineHeight: 1.15, overflowWrap: "anywhere" }}>
             {payload?.controller_mode?.toUpperCase() || "STANDBY"}
           </div>
         </div>
@@ -182,7 +184,7 @@ export default function OperatorDecisionPanel({ payload }: { payload: Simulation
           <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.1em" }}>
             Context
           </div>
-          <div style={{ marginTop: "8px", fontFamily: "var(--font-display)", fontSize: "1.2rem" }}>
+          <div style={{ marginTop: "8px", fontFamily: "var(--font-display)", fontSize: "1.08rem", lineHeight: 1.15, overflowWrap: "anywhere" }}>
             {payload?.operating_context_mode?.replaceAll("_", " ").toUpperCase() || "STATIC"}
           </div>
         </div>
@@ -190,7 +192,7 @@ export default function OperatorDecisionPanel({ payload }: { payload: Simulation
           <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.1em" }}>
             Posture
           </div>
-          <div style={{ marginTop: "8px", fontFamily: "var(--font-display)", fontSize: "1.2rem" }}>
+          <div style={{ marginTop: "8px", fontFamily: "var(--font-display)", fontSize: "1.08rem", lineHeight: 1.15, overflowWrap: "anywhere" }}>
             {postureLabel(topologySignal?.controller_posture)}
           </div>
         </div>

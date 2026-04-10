@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, Variants } from "framer-motion";
 import {
   Activity,
@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import AssetRoster from "@/components/AssetRoster";
 import CityTwinLaunchPanel from "@/components/CityTwinLaunchPanel";
+import EmergencyAlertBanner from "@/components/EmergencyAlertBanner";
 import LedgerTable from "@/components/LedgerTable";
 import OperatorDecisionPanel from "@/components/OperatorDecisionPanel";
 import SignalDock from "@/components/SignalDock";
@@ -30,17 +31,29 @@ import {
 const FALLBACK_FEATURED_LOCATIONS: GeoFeaturedLocation[] = [
   {
     query: "London",
-    location: { display_name: "London, England, United Kingdom", city: "London", country: "United Kingdom" },
+    location: {
+      display_name: "London, England, United Kingdom",
+      city: "London",
+      country: "United Kingdom",
+    },
     recommended_district_type: "mixed_use",
   },
   {
     query: "Boston",
-    location: { display_name: "Boston, Massachusetts, United States", city: "Boston", country: "United States" },
+    location: {
+      display_name: "Boston, Massachusetts, United States",
+      city: "Boston",
+      country: "United States",
+    },
     recommended_district_type: "campus",
   },
   {
     query: "Mumbai",
-    location: { display_name: "Mumbai, Maharashtra, India", city: "Mumbai", country: "India" },
+    location: {
+      display_name: "Mumbai, Maharashtra, India",
+      city: "Mumbai",
+      country: "India",
+    },
     recommended_district_type: "industrial",
   },
   {
@@ -51,6 +64,50 @@ const FALLBACK_FEATURED_LOCATIONS: GeoFeaturedLocation[] = [
 ];
 
 type IntelView = "decisions" | "trace" | "network" | "fleet" | "market" | "signals";
+type EmergencyScenario =
+  | "congestion_wave"
+  | "feeder_fault"
+  | "line_derating"
+  | "heatwave"
+  | "carbon_spike"
+  | "solar_offline";
+
+const EMERGENCY_OPTIONS: Array<{
+  value: EmergencyScenario;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: "congestion_wave",
+    label: "Congestion Wave",
+    hint: "Derate feeder headroom across the district.",
+  },
+  {
+    value: "feeder_fault",
+    label: "Feeder Fault",
+    hint: "Isolate a feeder and trigger outage behavior.",
+  },
+  {
+    value: "line_derating",
+    label: "Line Derating",
+    hint: "Constrain a branch and raise line stress.",
+  },
+  {
+    value: "heatwave",
+    label: "Heatwave",
+    hint: "Increase load through ambient temperature stress.",
+  },
+  {
+    value: "carbon_spike",
+    label: "Carbon Spike",
+    hint: "Raise carbon intensity and pressure cleaner dispatch.",
+  },
+  {
+    value: "solar_offline",
+    label: "Solar Offline",
+    hint: "Remove solar support and test supply resilience.",
+  },
+];
 
 function intelTabLabel(view: IntelView) {
   if (view === "decisions") return "Decisions";
@@ -71,12 +128,27 @@ export default function Home() {
     twinError,
     togglePause,
     triggerEmergency,
+    clearEmergency,
     loadCityTwin,
   } = useSimulationWebSocket();
   const [featuredLocations, setFeaturedLocations] = useState<GeoFeaturedLocation[]>(
     FALLBACK_FEATURED_LOCATIONS,
   );
   const [intelView, setIntelView] = useState<IntelView>("decisions");
+  const [isEmergencyMenuOpen, setIsEmergencyMenuOpen] = useState(false);
+  const emergencyMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!emergencyMenuRef.current) return;
+      if (!emergencyMenuRef.current.contains(event.target as Node)) {
+        setIsEmergencyMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,6 +200,23 @@ export default function Home() {
   const twinModeLabel =
     data?.atlas_context?.mode === "city_to_twin" ? "CITY TWIN LIVE" : "SANDBOX DISTRICT";
   const controlPosture = data?.topology_control_signal?.controller_posture;
+  const activeEmergency = data?.emergency || null;
+  const activeEmergencyEvent = data?.topology_runtime?.active_events?.[0];
+  const activeEmergencyLabel =
+    activeEmergencyEvent?.label ||
+    EMERGENCY_OPTIONS.find((option) => option.value === activeEmergency)?.label ||
+    "Inject Emergency";
+
+  const handleEmergencySelect = (scenario: EmergencyScenario | "clear") => {
+    setIsEmergencyMenuOpen(false);
+
+    if (scenario === "clear") {
+      clearEmergency();
+      return;
+    }
+
+    triggerEmergency(scenario);
+  };
 
   const renderIntelView = () => {
     if (intelView === "trace") {
@@ -148,6 +237,7 @@ export default function Home() {
         <TopologyStressPanel
           topologyRuntime={data?.topology_runtime}
           topologyControlSignal={data?.topology_control_signal}
+          activeScenario={activeEmergency}
           controlEntities={data?.control_entities || []}
         />
       );
@@ -297,18 +387,74 @@ export default function Home() {
                   </>
                 )}
               </button>
-              <button className="btn btn-outline" onClick={() => triggerEmergency("congestion_wave")}>
-                <CloudLightning size={18} color="var(--neon-amber)" />
-                Congestion
-              </button>
-              <button className="btn btn-danger" onClick={() => triggerEmergency("feeder_fault")}>
-                <AlertCircle size={18} />
-                Feeder Fault
-              </button>
+
+              <div ref={emergencyMenuRef} className="event-menu-shell">
+                <button
+                  type="button"
+                  className={`btn btn-outline event-menu-trigger ${activeEmergency ? "armed" : ""}`}
+                  onClick={() => setIsEmergencyMenuOpen((open) => !open)}
+                  aria-haspopup="menu"
+                  aria-expanded={isEmergencyMenuOpen}
+                >
+                  <CloudLightning size={18} />
+                  {activeEmergencyLabel}
+                  <span className={`event-menu-caret ${isEmergencyMenuOpen ? "open" : ""}`}>▼</span>
+                </button>
+
+                {activeEmergency && !isEmergencyMenuOpen && (
+                  <button
+                    type="button"
+                    className="btn btn-danger event-clear-trigger"
+                    onClick={() => clearEmergency()}
+                  >
+                    Clear Emergency
+                  </button>
+                )}
+
+                {isEmergencyMenuOpen && (
+                  <div className="event-menu-list" role="menu">
+                    {EMERGENCY_OPTIONS.map((option) => {
+                      const isActive = option.value === activeEmergency;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className={`event-menu-item ${isActive ? "active" : ""}`}
+                          onClick={() => handleEmergencySelect(option.value)}
+                          role="menuitem"
+                        >
+                          <div className="event-menu-copy">
+                            <div className="event-menu-label">{option.label}</div>
+                            <div className="event-menu-hint">{option.hint}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+
+                    <button
+                      type="button"
+                      className="event-menu-item clear"
+                      onClick={() => handleEmergencySelect("clear")}
+                      role="menuitem"
+                    >
+                      <div className="event-menu-copy">
+                        <div className="event-menu-label">Clear Emergency</div>
+                        <div className="event-menu-hint">Return the twin to nominal operation.</div>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="map-stage-frame">
+          <div className="map-stage-frame" style={{ display: "flex", flexDirection: "column" }}>
+            <div style={{ position: "absolute", top: "16px", left: "16px", right: "16px", zIndex: 10 }}>
+              <EmergencyAlertBanner
+                activeEvents={data?.topology_runtime?.active_events || []}
+                activeScenario={activeEmergency}
+              />
+            </div>
             <TwinMapCanvas
               geoContext={data?.geo_context}
               buildings={data?.buildings || []}
