@@ -83,60 +83,45 @@ The platform is 100% complete, highly polished, and covers all phases of a produ
 
 ## 🚀 Setup & Execution
 
-NEXUS GRID is production-ready. You will need a variety of data provider API keys to allow the digital twin to hook into live macro-grid telemetry.
+NEXUS GRID is production-ready but optimized for one-click hackathon deployment. 
 
-### 1. Environment Configuration
+> **Important Note on API Keys:** While the system natively hooks into Electricity Maps and EPEX SPOT for live telemetry, you can leave the `.env` API keys blank! Our backend will automatically fall back to its internal stochastic mock-data engine. It runs flawlessly out-of-the-box.
 
-In the `nexus-grid/backend` directory, duplicate `.env.example` into `.env` and configure your API keys for live ingestion:
+### 1. One-Click Boot Sequence (Recommended)
+We built a unified startup script so you do not have to mess around with managing separate terminal windows.
 
-```env
-# NEXUS GRID: PRODUCTION ENVIRONMENT VARIABLES
-
-# Environment Context
-DEBUG=False
-WS_HEARTBEAT_INTERVAL=10
-SIMULATION_TICK_SPEED_MS=200
-
-# Live Data Ingestion Providers
-ELECTRICITY_MAPS_API_KEY=your_production_key_here  # For real-time grid carbon intensity
-WEATHER_API_KEY=your_openweathermap_key_here       # For solar irradiance modeling
-MARKET_TARIFF_API_SECRET=your_epex_or_caiso_key    # For wholesale pricing elasticity
-
-# RL Analytics (Optional)
-WANDB_API_KEY=your_weights_and_biases_key          # For RL loss tracking
+**For Windows:**
+Simply double-click `start.bat` or run:
+```cmd
+.\start.bat
 ```
 
-### 2. Spinning Up the Physics & AI Engine
+**For Mac/Linux:**
+```bash
+chmod +x start.sh
+./start.sh
+```
+*This will automatically generate the Python virtual environments, install all backend and frontend dependencies, boot the REST/WebSocket API on port `8000`, and launch the Next.js UI on port `3000`.*
 
-The asynchronous backend runs the twin, the RL agents, and the websocket server.
+### 2. Manual Setup (For Granular Control)
 
+If you prefer to run the components manually, configure your `.env` (using `.env.example`) and run them exactly like a standard production monolith.
+
+**Backend (FastAPI):**
 ```bash
 cd nexus-grid/backend
 python -m venv venv
-
-# Windows
-venv\Scripts\activate
-# Mac/Linux
-# source venv/bin/activate
-
+source venv/bin/activate  # (or venv\Scripts\activate on Windows)
 pip install -r requirements.txt
-
-# Boot the engine
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
-> The API and WebSocket orchestration server will successfully bind to `localhost:8000`.
 
-### 3. Deploying the Operator Command Center
-
-The Next.js UI is the window into the mathematical simulation. Open a fresh terminal and run:
-
+**Frontend (Next.js 14):**
 ```bash
 cd nexus-grid/frontend
 npm install
 npm run dev
 ```
-
-> Launch your browser on `localhost:3000`. You will immediately see the UI connect via WebSockets to the digital twin and begin visualization.
 
 ---
 
