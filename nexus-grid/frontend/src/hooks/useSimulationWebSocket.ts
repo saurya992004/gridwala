@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { getApiUrl, getWebSocketUrl } from "@/lib/runtime-config";
 
 export interface BuildingState {
   id: string;
@@ -331,7 +332,7 @@ export function useSimulationWebSocket(presetId: string = "residential_district"
       setTwinError(null);
 
       try {
-        const response = await fetch("http://127.0.0.1:8000/api/geo/schema", {
+        const response = await fetch(getApiUrl("/api/geo/schema"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -373,7 +374,7 @@ export function useSimulationWebSocket(presetId: string = "residential_district"
     const connect = () => {
       if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-      const ws = new WebSocket(`ws://127.0.0.1:8000/ws/simulate?preset=${presetId}`);
+      const ws = new WebSocket(getWebSocketUrl(`/ws/simulate?preset=${presetId}`));
 
       ws.onopen = () => {
         setIsConnected(true);

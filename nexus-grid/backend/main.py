@@ -5,6 +5,7 @@ Entry point for the NEXUS GRID API server.
 
 import asyncio
 import json
+import os
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -31,9 +32,24 @@ app = FastAPI(
     version="2.4.0",
 )
 
+
+def _allowed_origins():
+    defaults = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+    configured = os.getenv("NEXUS_ALLOWED_ORIGINS", "")
+    extra = [origin.strip() for origin in configured.split(",") if origin.strip()]
+
+    deduped = []
+    for origin in [*defaults, *extra]:
+        if origin not in deduped:
+            deduped.append(origin)
+    return deduped
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

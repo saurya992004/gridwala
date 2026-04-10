@@ -27,6 +27,7 @@ import {
   GeoFeaturedLocation,
   useSimulationWebSocket,
 } from "@/hooks/useSimulationWebSocket";
+import { getApiUrl } from "@/lib/runtime-config";
 
 const FALLBACK_FEATURED_LOCATIONS: GeoFeaturedLocation[] = [
   {
@@ -155,7 +156,7 @@ export default function Home() {
 
     const fetchFeaturedLocations = async () => {
       try {
-        const response = await fetch("http://127.0.0.1:8000/api/geo/featured?limit=6");
+        const response = await fetch(getApiUrl("/api/geo/featured?limit=6"));
         if (!response.ok) return;
 
         const payload = (await response.json()) as {

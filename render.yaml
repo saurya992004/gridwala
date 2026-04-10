@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: gridwala-nexusgrid-backend
+    runtime: python
+    rootDir: nexus-grid/backend
+    plan: free
+    healthCheckPath: /status
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: NEXUS_ALLOWED_ORIGINS
+        value: https://gridwala-nexusgrid-frontend.onrender.com
+      - key: NEXUS_NOMINATIM_USER_AGENT
+        value: NEXUS-GRID/1.0
+      - key: NEXUS_NOMINATIM_EMAIL
+        value: your-email@example.com
+      - key: NEXUS_ELECTRICITYMAPS_API_KEY
+        sync: false
+      - key: NEXUS_OPENEI_API_KEY
+        sync: false
+
+  - type: web
+    name: gridwala-nexusgrid-frontend
+    runtime: node
+    rootDir: nexus-grid/frontend
+    plan: free
+    healthCheckPath: /
+    buildCommand: npm install && npm run build
+    startCommand: npx next start -H 0.0.0.0 -p $PORT
+    envVars:
+      - key: NEXT_PUBLIC_NEXUS_API_URL
+        value: https://gridwala-nexusgrid-backend.onrender.com
+      - key: NEXT_PUBLIC_NEXUS_MAP_STYLE_URL
+        sync: false
+      - key: NEXT_PUBLIC_NEXUS_PMTILES_URL
+        sync: false
