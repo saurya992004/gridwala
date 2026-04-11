@@ -12,9 +12,25 @@
 
 <br/>
 
-The transition to renewables and EVs has turned our once-predictable grid into a chaotic, non-stationary mathematical environment. The current industry standard relies on human-authored, static *"if-this-then-that"* rules, or pre-trained ML models that instantly degrade during physical grid anomalies (data drift).
+### 📊 Pitch Deck
+[**View the AlgoFest 2026 Presentation (Google Drive)**](https://drive.google.com/file/d/1vxaxv1BPe_PtsL3CYBJQc_K334l_ec4Q/view?usp=sharing)
 
-**NEXUS GRID** is a mathematically advanced digital twin and autonomous control operating system. It instantly generates a live topological twin of any district, injects real-world telemetry, and unleashes a swarm of **Multi-Agent Transformer (MAT)** policy networks with **QMIX value decomposition** — enabling emergent cooperative energy dispatch with zero-shot generalization to unseen grid configurations.
+---
+
+### 🚨 The Problem
+Modern energy grids are decaying under the weight of their own complexity. As we transition to distributed energy resources (DERs), energy supply has become volatile, decentralized, and entirely unpredictable. 
+
+**Current industry tools fail catastrophically because:**
+- They rely on **human-authored static heuristics** that cannot scale.
+- They depend on **pre-trained machine learning models** that instantly degrade during physical grid anomalies (data drift).
+- They are **blind to the underlying physical constraints** of the grid.
+
+**The exact problem:** The grid is no longer a predictable top-down utility; it is an infinitely complex mathematical graph, and we lack the dynamic intelligence to orchestrate it.
+
+### 💡 The Solution
+**NEXUS GRID** is a groundbreaking, mathematically advanced digital twin and autonomous control operating system. 
+
+We instantly generate a live topological twin of any city, inject real-world telemetry, and unleash a swarm of **Non-Pretrained Reinforcement Learning Agents** (specifically, **Multi-Agent Transformers** with **QMIX** value decomposition) to autonomously balance the grid—enabling emergent cooperative energy dispatch with zero-shot generalization to unseen grid configurations.
 
 ---
 
