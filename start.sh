@@ -2,25 +2,38 @@
 set -e
 
 echo "==================================================="
-echo "    NEXUS GRID - AlgoFest 2026 Boot Sequence"
+echo "    NEXUS GRID - Local Judge Boot Sequence"
 echo "==================================================="
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "[1/2] Spinning up FastAPI Physics Engine (Background)..."
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "[ERROR] python3 was not found. Install Python 3.11+ and run again."
+  exit 1
+fi
+
+if ! command -v npm >/dev/null 2>&1; then
+  echo "[ERROR] npm was not found. Install Node.js 20+ and run again."
+  exit 1
+fi
+
+echo "[1/2] Starting FastAPI backend..."
 cd "$ROOT_DIR/nexus-grid/backend"
 if [ ! -d "venv" ]; then
   python3 -m venv venv
 fi
 source venv/bin/activate
-pip install -r requirements.txt -q
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 nohup uvicorn main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
 BACKEND_PID=$!
 trap "kill $BACKEND_PID" EXIT
-cd "$ROOT_DIR"
 
-echo "[2/2] Launching Next.js Command Center..."
+echo "[2/2] Starting Next.js frontend..."
 cd "$ROOT_DIR/nexus-grid/frontend"
-npm install --silent
-echo "All systems go! Command Center opening on http://localhost:3000"
+npm install
+echo "NEXUS GRID is starting."
+echo "Frontend: http://localhost:3000"
+echo "Backend:  http://localhost:8000"
+echo "Keep this terminal open while the frontend runs."
 npm run dev
