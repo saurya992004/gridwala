@@ -11,7 +11,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import torch
+try:
+    import torch
+except ModuleNotFoundError:  # pragma: no cover - deployment fallback
+    torch = None
 
 
 CORE_DIR = Path(__file__).resolve().parent
@@ -119,7 +122,7 @@ def get_model(model_id: str) -> Optional[Dict[str, Any]]:
     metadata["has_checkpoint"] = checkpoint_file.exists()
     metadata["checkpoint_path"] = str(checkpoint_file)
 
-    if checkpoint_file.exists():
+    if checkpoint_file.exists() and torch is not None:
         try:
             checkpoint = torch.load(checkpoint_file, map_location="cpu", weights_only=True)
         except TypeError:
@@ -132,5 +135,8 @@ def get_model(model_id: str) -> Optional[Dict[str, Any]]:
         metadata["reward_history_tail"] = reward_history[-10:]
         metadata["best_recorded_reward"] = max(reward_history) if reward_history else None
         metadata["latest_recorded_reward"] = reward_history[-1] if reward_history else None
+    elif checkpoint_file.exists():
+        metadata["checkpoint_runtime"] = "metadata-only"
+        metadata["checkpoint_warning"] = "PyTorch is unavailable in this runtime."
 
     return metadata

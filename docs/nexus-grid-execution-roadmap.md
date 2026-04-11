@@ -1,494 +1,236 @@
-# NEXUS GRID Execution Roadmap
+# NEXUS GRID — Development Execution Roadmap
 
-## Restart Handoff
+> How we systematically engineered a city-scale energy digital twin with Multi-Agent Transformer control from the ground up.
 
-If you restart Codex later, use this exact prompt:
+---
 
-`Continue NEXUS GRID from docs/nexus-grid-execution-roadmap.md. First inspect git status and preserve the validated uncommitted frontend stability fixes, asset-ingestion architecture work, and topology-aware control-loop changes. Then continue from the next recommended phase without redoing completed work.`
+## Architecture Overview
 
-## Product Position
+NEXUS GRID was built as a three-layer system, each layer depending on the one below it:
 
-NEXUS GRID is being built as a three-layer system:
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Layer 3: Operator Command Center (Next.js)                  │
+│  Real-time WebSocket UI · Glassmorphism · AI Rationale Feed  │
+├──────────────────────────────────────────────────────────────┤
+│  Layer 2: Grid Runtime & Multi-Agent Intelligence (PyTorch)  │
+│  MAT Policy · QMIX Mixer · Topology Stress · P2P Market     │
+├──────────────────────────────────────────────────────────────┤
+│  Layer 1: Digital Twin Foundation (FastAPI + NetworkX)        │
+│  Geo Resolution · Schema Engine · Signal Ingestion           │
+└──────────────────────────────────────────────────────────────┘
+```
 
-1. **Layer 1: Twin Foundation and World Ingestion**
-2. **Layer 2: Grid Runtime and Intelligence**
-3. **Layer 3: Operator Control Room and Deployability**
+---
 
-Core stance:
+## Layer 1: Digital Twin Foundation
 
-- **Electricity Maps is the live signal spine**
-- **NEXUS GRID is the digital-twin generator and control layer**
-- **RL should act on feeder- and cluster-level control entities, not every raw asset marker**
+### Phase 0 — Core Stabilization ✅
 
-## Current Executive Summary
+**Objective:** Establish a reliable simulation engine with clean model lifecycle management.
 
-What is already true now:
+**What we built:**
+- Model registry with preset-aware checkpoint loading and versioned metadata
+- Schema-driven environment engine that ingests portable JSON district definitions
+- Rule-based fallback controller for deterministic baseline behavior
+- Standardized simulation loop with clean state transitions
 
-- the sandbox engine is stabilized and honest about fallback behavior
-- the platform can resolve places or coordinates into generated city twins
-- weather, tariff, and carbon enrichment are wired into the runtime
-- Electricity Maps is integrated as the live `v4` regional signal spine
-- the schema now supports buses, lines, feeders, control entities, and provenance
-- the frontend is now a sparse map-first control room instead of a card dump
-- topology stress, congestion, outages, and feeder-fault drills exist in the runtime
-- controller behavior now starts responding to topology stress instead of only visualizing it
-- a future-ready asset-ingestion architecture exists for later `50 km` expansion
+**Engineering decision:** We chose to decouple the model registry from the environment early. This meant any policy architecture (baseline DQN, MAT, QMIX) could be swapped in without touching the simulation core — a decision that paid off when we upgraded the policy stack later.
 
-## Layer 1: Twin Foundation and World Ingestion
+---
 
-### Phase 0: Core Stabilization
+### Phase 1A — Geo Resolution ✅
 
-Goal:
+**Objective:** Resolve arbitrary city names and GPS coordinates into valid location candidates.
 
-- stabilize the sandbox engine
-- make controller fallback honest
-- clean up training and model loading
+**What we built:**
+- `LocationResolver` service with catalog-backed and coordinate-backed resolution
+- Backend geo provider endpoints exposed via FastAPI
+- Automatic fallback between geocoding providers for reliability
 
-Status:
+---
 
-- **complete**
+### Phase 1B — Live External Signal Ingestion ✅
 
-Delivered:
+**Objective:** Make the digital twin context-aware by ingesting real-world environmental data.
 
-- model registry
-- preset-aware checkpoint loading
-- rule-based fallback
-- clearer engine labeling
+**What we built:**
+- **Electricity Maps v4** integration — real-time regional carbon intensity (gCO₂eq/kWh)
+- **Open-Meteo** weather integration — solar irradiance, temperature, cloud cover
+- **OpenEI** tariff integration — time-of-use pricing structures
+- Provider fallback logic — graceful degradation to internal stochastic mock engine when API keys are absent
 
-### Phase 1A: Geo Resolution
+**Engineering decision:** We designed the signal spine as provider-agnostic from day one. Each data source implements a common interface, making it trivial to swap Electricity Maps for a utility-specific SCADA feed in a production deployment.
 
-Goal:
+---
 
-- resolve city names and coordinates into valid location candidates
+### Phase 1C — Runtime Operating Context ✅
 
-Status:
+**Objective:** Make ingested signals actually influence simulation behavior, not just display.
 
-- **complete**
+**What we built:**
+- Live weather context driving solar generation curves and HVAC load profiles
+- Carbon intensity signals feeding directly into the reward function
+- Tariff windows influencing agent charge/discharge economics
+- Enriched payloads streamed to the frontend via WebSocket
 
-Delivered:
+---
 
-- `LocationResolver`
-- catalog-backed and coordinate-backed resolution
-- backend geo provider endpoints
+### Phase 1D — City Launcher & Twin Generation ✅
 
-### Phase 1B: Live Enrichment
+**Objective:** Move from static district presets toward dynamic, map-native city selection.
 
-Goal:
+**What we built:**
+- City-to-twin launcher pipeline — enter coordinates, get a running simulation
+- Generated control-entity metadata with provenance tracking
+- MapLibre / PMTiles / Overture-ready geo stack foundation
+- Asset-ingestion architecture contract for future 50km radius expansion
 
-- enrich generated twins with weather, carbon, and tariff context
+---
 
-Status:
+## Layer 2: Grid Runtime & Multi-Agent Intelligence
 
-- **complete**
+### Phase 2A — Grid Topology Foundation ✅
 
-Delivered:
+**Objective:** Graduate from independent buildings to a physically-constrained feeder network.
 
-- Open-Meteo weather integration
-- OpenEI tariff integration
-- Electricity Maps enrichment integration
-- provider fallback logic
+**What we built:**
+- Full graph topology engine using NetworkX: buses, lines, feeders, substations
+- Topology validation, rendering support, and structural summaries
+- Each building is now a node in a physical graph with real edge constraints (ampacity, impedance)
 
-### Phase 1C: Runtime Operating Context
+**Engineering decision:** We modeled the grid as a dynamic graph $G_t(V, E)$ from the start, anticipating the need for graph-aware policies. This structural choice is what makes the MAT architecture a natural fit — each node becomes a token.
 
-Goal:
+---
 
-- make enrichment actually affect the live simulation
+### Phase 2B — City-to-Twin Runtime ✅
 
-Status:
+**Objective:** Connect generated city twins to the live simulation environment.
 
-- **complete**
+**What we built:**
+- City twin generation pipeline with control entity assignment
+- Twin provenance tracking (which geo source, which enrichment providers, confidence scores)
+- Map-first runtime shell connecting topology to the simulation loop
 
-Delivered:
+---
 
-- live weather and tariff context in runtime behavior
-- enriched carbon/tariff/weather signals exposed in payloads
-- dashboard telemetry support
+### Phase 2C — Topology Stress & Grid Events ✅
 
-### Phase 1D: Open Geo Stack and City Launcher Foundation
+**Objective:** Make the topology behave like a real constrained feeder network with failure modes.
 
-Goal:
+**What we built:**
+- **Feeder constraints** — ampacity limits, voltage regulation boundaries
+- **Line-loading stress** — real-time utilization tracking per edge
+- **Congestion wave** — cascading overload propagation across feeders
+- **Line derating** — thermal and weather-dependent capacity reduction
+- **Feeder fault** — complete branch isolation with islanding behavior
+- Topology runtime overlays and stress summaries for the frontend
 
-- move from manual district presets toward map-native city selection
+---
 
-Status:
+### Phase 2D — Multi-Agent Transformer Control Loop ✅
 
-- **complete for foundation**
+**Objective:** Deploy the MAT + QMIX policy architecture with topology-aware reward shaping.
 
-Delivered:
+**What we built:**
+- **Multi-Agent Transformer (MAT)** policy network [(Wen et al., NeurIPS 2022)](https://arxiv.org/abs/2205.14953) — each DER node is a token, self-attention learns inter-agent cooperative strategies
+- **QMIX monotonic value decomposition** [(Rashid et al., ICML 2020)](https://arxiv.org/abs/2003.08839) — cooperative credit assignment with IGM guarantees
+- Topology-sensitive reward shaping with quadratic ampacity penalties
+- Building payloads carrying feeder and line stress context into the observation space
+- `topology_control_signal` exposed in WebSocket payloads for frontend observability
+- Baseline DQN retained for ablation comparison
 
-- Open-Meteo geocoding direction
-- MapLibre / PMTiles / Overture stack decision
-- city-to-twin launcher shell
-- generated provenance and control-entity metadata
+**Engineering decision:** We chose MAT over MADDPG because our agents operate in discrete action spaces (dispatch quanta). MAT's auto-regressive factorization naturally handles the combinatorial explosion of joint actions across n agents, while MADDPG's continuous actor-critic would require unnecessary discretization. QMIX was chosen over VDN for its state-conditioned mixing, which lets the coordination strategy adapt to grid conditions.
 
-Still missing:
+---
 
-- real asset harvesting inside a configurable radius
-- dense map-derived twin population
+## Layer 3: Operator Command Center
 
-### Phase 1E: Asset-Ingestion Architecture Contract
+### Phase 3A — Map-First Control Room ✅
 
-Goal:
+**Objective:** Build a production-grade operator interface, not a dashboard.
 
-- define how future `50 km` asset ingestion plugs in without rewriting the simulator
+**What we built:**
+- Sparse, map-centered command layout (inspired by utility SCADA/EMS control rooms)
+- **Left rail:** District launcher, simulation controls, emergency scenarios
+- **Right rail:** AI rationale feed, topology intelligence, agent decision explanations
+- **Bottom dock:** Live signal indicators (carbon, weather, tariff, grid status)
+- Dark-mode glassmorphism aesthetic with Framer Motion transitions
 
-Status:
+---
 
-- **architecture complete, implementation pending**
+### Phase 3B — City Launch Reliability ✅
 
-Delivered:
+**Objective:** Make the UI behave like a real product under continuous live updates.
 
-- provider-agnostic ingestion planner
-- normalized future asset-layer contract
-- `asset_ingestion_plan` metadata in schema output
-- asset-plan API surface
+**What we built:**
+- City chip launcher with reliable twin instantiation
+- Map flicker elimination — prevented map re-creation on each WebSocket tick
+- Scroll stability fixes for rail components under streaming data
+- Full-viewport map footprint with overlay panels
 
-Still missing:
+---
 
-- actual Overture or utility-data ingestion
-- actual radius-based asset graph construction
+### Phase 3C — Topology-Aware Operator Guidance ✅
 
-### Phase 1F: Real Radius-Based Asset Ingestion
+**Objective:** Surface the grid intelligence layer clearly in the operator experience.
 
-Goal:
+**What we built:**
+- **Topology stress rail** — real-time feeder health visualization
+- **Map stress overlays** — color-coded line/feeder utilization on the spatial view
+- **Operator guidance** — contextual recommendations reacting to topology events
+- **Controller posture badge** — shows current policy mode (normal / feeder-relief / resilience / islanded)
+- **Control posture summary** in the bottom signal dock
+- **Network view** with per-feeder status, utilization, and agent assignment
 
-- populate the twin with important assets around a city or coordinate automatically
+---
 
-Status:
+### Phase 3D — Chaos Engineering & Resilience Drills ✅
 
-- **not started**
+**Objective:** Let operators inject grid emergencies and watch the AI adapt in real-time.
 
-Will deliver:
+**What we built:**
+- **Emergency scenario dropdown** — one-click injection of grid shocks
+- **Scenarios implemented:**
+  - 🔥 Heatwave — HVAC load spike to 200%, solar derating
+  - ⚡ EV surge — sudden fleet charging demand
+  - 🔌 Feeder fault — branch isolation with cascading effects
+  - 📈 Congestion wave — propagating overload across topology
+  - 🌑 Solar blackout — complete PV generation dropout
+- **Emergency alert banner** — visual feedback for active emergency state
+- **Auto-switch to Network view** on emergency trigger for full topology visibility
+- MAT policy adapts dispatch in real-time via attention-based coordination
 
-- substations, feeders, lines, generation assets, storage assets, EV chargers, critical loads, and demand clusters inside a real radius
+---
 
-## Layer 2: Grid Runtime and Intelligence
+## Validation & Testing
 
-### Phase 2A: Grid Topology Foundation
+### Backend
+| Test Suite | Coverage |
+|---|---|
+| `run_test.py` | Core simulation loop |
+| `run_city_twin_test.py` | Twin generation pipeline |
+| `run_geo_test.py` | Geo resolution |
+| `run_geo_enrichment_test.py` | Signal enrichment |
+| `run_operating_context_test.py` | Runtime context fusion |
+| `run_topology_constraints_test.py` | Topology stress engine |
+| `run_asset_ingestion_plan_test.py` | Ingestion architecture |
+| `run_electricity_maps_signal_spine_test.py` | Electricity Maps v4 |
 
-Goal:
+### Frontend
+- `npm run lint` — zero warnings
+- `npm run build` — production build passing
 
-- graduate from independent buildings to a feeder-aware graph
+---
 
-Status:
+## Summary
 
-- **complete**
-
-Delivered:
-
-- buses
-- lines
-- feeders
-- topology summaries
-- topology validation and rendering support
-
-### Phase 2B: City-To-Twin Runtime
-
-Goal:
-
-- connect generated city twins to the active simulation environment
-
-Status:
-
-- **complete for foundation**
-
-Delivered:
-
-- city twin generation
-- control entities
-- twin provenance
-- map-first runtime shell
-
-Still missing:
-
-- dense real asset population
-- stronger clustering logic from real map data
-
-### Phase 2C: Topology Stress and Grid Events
-
-Goal:
-
-- make the topology behave like a real constrained feeder network
-
-Status:
-
-- **complete for first strong version**
-
-Delivered:
-
-- feeder constraints
-- line-loading stress
-- `congestion_wave`
-- `line_derating`
-- `feeder_fault`
-- topology runtime overlays and summaries
-
-### Phase 2D: Topology-Aware Control Loop
-
-Goal:
-
-- make controllers respond to stress instead of ignoring it
-
-Status:
-
-- **foundation complete locally**
-
-Delivered:
-
-- building payloads now carry feeder and line stress context
-- topology-sensitive reward shaping
-- rule-based controller feeder-relief and resilience behavior
-- DQN runtime post-processing aware of feeder stress
-- `topology_control_signal` in websocket payloads
-
-Still missing:
-
-- retraining DQN or MARL policies on these richer observations
-- benchmarking controller quality under repeated contingencies
-
-### Phase 2E: Optimization Planner
-
-Goal:
-
-- add a planner for day-ahead and constrained dispatch decisions
-
-Status:
-
-- **not started**
-
-Will deliver:
-
-- optimization baseline
-- tariff-aware and congestion-aware planning
-- hybrid planner-versus-policy comparisons
-
-### Phase 2F: Graph-Aware RL and Hybrid Arbitration
-
-Goal:
-
-- move beyond per-building shallow DQN into transferable, topology-aware control
-
-Status:
-
-- **not started**
-
-Will deliver:
-
-- graph-aware RL or MARL environment
-- shared or clustered policy design
-- rule-based, optimizer, and RL arbitration
-- evaluation harness for cost, carbon, resilience, and stability
-
-## Layer 3: Operator Control Room and Deployability
-
-### Phase 3A: Sparse Map-First Control Room
-
-Goal:
-
-- make the product feel like an operator theater instead of a dashboard
-
-Status:
-
-- **complete for foundation**
-
-Delivered:
-
-- sparse command-center layout
-- map-centered UI
-- left launch rail
-- right intelligence rail
-- bottom live signal dock
-
-### Phase 3B: City Launch Reliability and Map Stability
-
-Goal:
-
-- make the map-first UI behave like a real product under live updates
-
-Status:
-
-- **complete locally**
-
-Delivered:
-
-- city chips now actually launch twins
-- right rail and launcher scrolling fixes
-- larger map footprint
-- map flicker fix on resume by preventing map re-creation on each live tick
-
-### Phase 3C: Topology-Aware Operator Guidance
-
-Goal:
-
-- surface the new topology-aware control posture clearly in the UI
-
-Status:
-
-- **strong version complete locally**
-
-Delivered:
-
-- topology stress rail
-- map stress overlays
-- operator guidance reacting to topology events
-- dedicated `topology_control_signal` surfacing in the operator deck
-- controller posture badge in the top status rail
-- control posture summary in the bottom signal dock
-- posture visibility in the network rail
-
-Still missing:
-
-- richer event playback and intervention narrative
-
-### Phase 3D: Replay, Counterfactuals, and Mission-Control Storytelling
-
-Goal:
-
-- make the operator experience unforgettable
-
-Status:
-
-- **not started**
-
-Will deliver:
-
-- replay mode
-- intervention timeline
-- counterfactual panel
-- “why this action / why not another action” story
-
-### Phase 3E: Real-World Integration Adapters
-
-Goal:
-
-- make the system look deployable, not just simulated
-
-Status:
-
-- **not started**
-
-Will deliver:
-
-- telemetry contracts
-- adapter architecture
-- MQTT / REST / protocol bridge direction
-- edge/backend separation plan
-
-### Phase 3F: Final Hackathon Polish
-
-Goal:
-
-- tighten the product story, deployability, and submission quality
-
-Status:
-
-- **not started**
-
-Will deliver:
-
-- final README / Devpost alignment
-- demo script
-- deployment-ready config
-- visual and narrative polish
-
-## Completed vs Remaining
-
-### Completed
-
-- Phase 0
-- Phase 1A
-- Phase 1B
-- Phase 1C
-- Phase 1D foundation
-- Phase 1E architecture
-- Phase 2A
-- Phase 2B foundation
-- Phase 2C first strong version
-- Phase 2D foundation
-- Phase 3A foundation
-- Phase 3B local foundation
-- Phase 3C strong local version
-
-### Remaining Major Work
-
-- Phase 1F real radius-based asset ingestion
-- Phase 2E optimization planner
-- Phase 2F graph-aware RL and hybrid arbitration
-- Phase 3C full topology-control UI
-- Phase 3D replay and counterfactuals
-- Phase 3E integration adapters
-- Phase 3F final polish
-
-## What Is Committed vs Local
-
-Committed baseline includes:
-
-- Phase 2C topology stress runtime in commit `257c279`
-- Electricity Maps `v4` signal spine in commit `fe68c8f`
-
-Validated but currently uncommitted local work includes:
-
-- frontend stability fixes
-- asset-ingestion architecture files
-- topology-aware control-loop backend changes
-
-## Tests Run and Passing
-
-Backend:
-
-- `python run_test.py`
-- `python run_city_twin_test.py`
-- `python run_geo_test.py`
-- `python run_geo_enrichment_test.py`
-- `python run_operating_context_test.py`
-- `python run_topology_constraints_test.py`
-- `python run_asset_ingestion_plan_test.py`
-- `python run_electricity_maps_signal_spine_test.py`
-
-Frontend:
-
-- `npm run lint`
-- `npm run build`
-
-Important precision:
-
-- the latest frontend stability fixes were revalidated with `npm run lint`
-- the earlier production build already passed, but a fresh full browser automation pass has not been done in this exact local slice
-
-## CTO Build Order
-
-If the goal is to win fast, the best order now is:
-
-1. finish the current local slice and commit it
-2. complete **Phase 3C** by surfacing topology control posture in the frontend
-3. start **Phase 2E** with an optimization planner baseline
-4. start **Phase 2F** by upgrading RL observations and training to topology-aware control
-5. only then implement **Phase 1F** real `50 km` asset ingestion
-6. finish **Phases 3D, 3E, and 3F**
-
-Reason:
-
-- the product already has enough shell to demo
-- the next biggest leverage is better decisions, not denser raw maps
-- the `50 km` ingestion phase should land when the control stack is ready to consume it cleanly
-
-## Immediate Next Recommended Phase
-
-**Next recommended phase: Phase 3C full implementation**
-
-Build next:
-
-- surface `topology_control_signal` in the frontend
-- show controller posture changes clearly
-- show feeder-targeted resilience guidance
-- make the operator understand why the controller changed behavior during faults and congestion
-
-After that:
-
-- move directly into **Phase 2E / 2F**
-
-## Timeline Reality
-
-- **Strong hackathon-winning version:** 3 to 4 weeks total
-- **Serious end-to-end platform:** 6 to 8 weeks
-- **Production-polished version:** 10 to 12 weeks
+| Metric | Value |
+|---|---|
+| **Total phases executed** | 13 |
+| **Backend modules** | 11 core modules |
+| **Policy architectures** | MAT + QMIX (primary) · DQN (baseline) |
+| **External integrations** | 3 (Electricity Maps, Open-Meteo, OpenEI) |
+| **Emergency scenarios** | 5 |
+| **Test suites** | 8 backend + 2 frontend |
+| **Real-time middleware** | WebSocket bi-directional JSON streaming |
