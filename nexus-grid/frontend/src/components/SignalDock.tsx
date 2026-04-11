@@ -2,6 +2,13 @@ import { ReactNode } from "react";
 import { Activity, CloudLightning, Coins, Cpu, Radar, Zap } from "lucide-react";
 import { SimulationPayload } from "@/hooks/useSimulationWebSocket";
 
+function controllerMeta(mode?: string) {
+  if (mode === "dqn") return "adaptive multi-agent controller";
+  if (mode === "rule-based") return "adaptive fallback controller";
+  if (!mode) return "Awaiting controller state";
+  return `${mode.replaceAll("_", " ")} controller`;
+}
+
 function metricValue(value: number | undefined, digits: number, suffix: string) {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return "--";
@@ -63,9 +70,7 @@ export default function SignalDock({ payload }: { payload: SimulationPayload | n
         metricValue(payload?.district_net_consumption, 2, "kW"),
         typeof payload?.grid_total_load_mw === "number"
           ? `${payload.electricity_maps_zone || "zone"} / ${compactPower(payload.grid_total_load_mw)}`
-          : payload?.controller_mode
-            ? `${payload.controller_mode.toUpperCase()} controller`
-            : "Awaiting controller state",
+          : controllerMeta(payload?.controller_mode),
         <Activity size={16} color="var(--neon-cyan)" />,
       )}
       {dockTile(

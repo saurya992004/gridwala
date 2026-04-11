@@ -1,6 +1,12 @@
 import { AlertCircle, ArrowRight, Brain, CloudLightning, Gauge, Zap } from "lucide-react";
 import { SimulationPayload } from "@/hooks/useSimulationWebSocket";
 
+function controllerLabel(mode?: string) {
+  if (!mode) return "STANDBY";
+  if (mode === "dqn") return "ADAPTIVE MULTI-AGENT CONTROL";
+  if (mode === "rule-based") return "ADAPTIVE FALLBACK ORCHESTRATION";
+  return mode.replaceAll("_", " ").toUpperCase();
+}
 
 function postureLabel(posture?: string) {
   if (posture === "resilience_priority") return "RESILIENCE";
@@ -177,7 +183,7 @@ export default function OperatorDecisionPanel({ payload }: { payload: Simulation
             Policy
           </div>
           <div style={{ marginTop: "8px", fontFamily: "var(--font-display)", fontSize: "1.08rem", lineHeight: 1.15, overflowWrap: "anywhere" }}>
-            {payload?.controller_mode?.toUpperCase() || "STANDBY"}
+            {controllerLabel(payload?.controller_mode)}
           </div>
         </div>
         <div className="metric-card" style={{ background: "rgba(2, 6, 23, 0.32)" }}>

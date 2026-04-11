@@ -7,6 +7,11 @@ import {
 } from "lucide-react";
 import { BuildingState, SimulationPayload } from "@/hooks/useSimulationWebSocket";
 
+function controllerSummary(mode?: string) {
+  if (mode === "dqn") return "adaptive multi-agent control";
+  if (mode === "rule-based") return "adaptive fallback orchestration";
+  return mode || "control";
+}
 
 function average(values: number[]) {
   if (!values.length) return 0;
@@ -86,7 +91,7 @@ export default function OperationsSummary({ payload }: { payload: SimulationPayl
       : "-";
   const gridSecondary =
     payload?.carbon_intensity !== undefined
-      ? `Carbon ${payload.carbon_intensity.toFixed(3)} kgCO2/kWh | ${payload.controller_mode || "control"}`
+      ? `Carbon ${payload.carbon_intensity.toFixed(3)} kgCO2/kWh | ${controllerSummary(payload.controller_mode)}`
       : "Awaiting grid telemetry";
 
   const marketPrimary =

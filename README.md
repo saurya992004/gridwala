@@ -40,31 +40,19 @@ We instantly generate a live topological twin of any city, inject real-world tel
 
 ---
 
-## 🧠 Core Innovation: Multi-Agent Transformer Policy Architecture
+## 🧠 Core Innovation: Adaptive Multi-Agent Control
 
-Our core innovation is the **novel application of the Multi-Agent Transformer (MAT) architecture** [[1]](#references) to energy digital twins. Each prosumer/DER node is treated as a **token in a sequential decision process**; the self-attention mechanism learns emergent cooperative dispatch strategies across the grid topology **without requiring predefined coordination protocols**.
+Our core innovation is **Adaptive Multi-Agent Control**, a topology-aware control framework that can shift coordination strategy as grid conditions change instead of binding the system to one static controller family. NexusGrid models the district as a **Decentralized Partially Observable MDP (Dec-POMDP)** over a dynamic graph $G_t(V, E)$ and lets the runtime route between cooperative RL behavior, safety-constrained fallback logic, and event-specific coordination according to feeder stress, tariff pressure, carbon intensity, and resilience requirements.
 
-This is paired with **QMIX monotonic value decomposition** [[2]](#references) for cooperative credit assignment, ensuring each agent's local policy contributes to global grid optimality via the **Individual-Global-Max (IGM)** principle.
+At the architectural level, this is compatible with **Multi-Agent Transformer-style sequence coordination** and **QMIX-style monotonic value decomposition** [[1]](#references) [[2]](#references), where local agent utilities can be composed into a globally aligned dispatch objective while preserving decentralized actionability. In practical terms, the system is designed to fall back or switch policy posture when the grid demands a different control regime, rather than forcing one brittle policy to operate across every market, weather, and topology state.
 
-### Mathematical Formulation
+Mathematically, the control objective can be written as a constrained cooperative optimization:
 
-The grid is modeled as a **Decentralized Partially Observable MDP (Dec-POMDP)** over a dynamic graph $G_t(V, E)$. The joint policy is factored as an auto-regressive sequence model:
+$$ \pi(\mathbf{a} | \mathbf{o}, G_t) = \arg\max_{\pi} \; \mathbb{E}\left[\sum_t R_t\right] \quad \text{s.t. feeder, line, and energy balance constraints} $$
 
-$$ \pi(\mathbf{a} | \mathbf{o}) = \prod_{i=1}^{n} \pi_\theta(a_i \mid o_1, \ldots, o_n, a_1, \ldots, a_{i-1}) $$
-
-Per-agent observations are embedded and enriched via multi-head self-attention:
-
-$$ \text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^\top}{\sqrt{d_k}}\right) \cdot V $$
-
-QMIX mixes individual agent utilities $Q_i$ into a joint $Q_{tot}$ via state-conditioned hypernetworks with **structurally enforced monotonicity** ($\partial Q_{tot} / \partial Q_i \geq 0$):
-
-$$ Q_{tot} = W_2^\top \cdot \text{ELU}\left(W_1^\top \cdot [Q_1, \ldots, Q_n]^\top + b_1(s)\right) + b_2(s) $$
-
-The reward function penalizes grid instability with a quadratic ampacity constraint and incentivizes carbon negation:
+with a reward shaped around cleaner dispatch, lower stress, and continuity of service:
 
 $$ R_t = \alpha \cdot \Delta E_{green} - \beta \cdot \mathcal{L}(C_{grid}^{(t)}) - \lambda \cdot \sum_{e \in E} \max\left(0, \frac{|I_e|}{I_{max}} - 1\right)^2 $$
-
-Training uses PPO-Clip [[4]](#references) with GAE-λ for low-variance multi-agent policy gradient updates.
 
 ---
 
